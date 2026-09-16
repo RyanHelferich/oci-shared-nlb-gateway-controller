@@ -20,6 +20,11 @@ LEGAL=re.compile(r'^(licen[cs]e|notice|copying|copyright|patents?)(?:[._-].*)?$'
 def digest(data):return hashlib.sha256(data).hexdigest()
 
 
+def canonical_text(data):
+    """Return UTF-8 text with LF endings so Windows and Linux builds agree."""
+    return data.decode('utf-8').replace('\r\n','\n').replace('\r','\n')
+
+
 def objects(text):
     decoder=json.JSONDecoder();result=[];text=text.lstrip('\ufeff')
     while text.strip():
@@ -62,13 +67,13 @@ def collect(packages,goroot,go_version,source_inputs):
     for key,component in sorted(components.items()):
         notices=[];root=component['root'].resolve()
         for path in legal_files(root,component['directories']):
-            data=path.read_bytes();text=data.decode('utf-8');sha=digest(data)
-            texts[sha]={'text':text,'originalBytesSHA256':sha}
+            text=canonical_text(path.read_bytes());sha=digest(text.encode('utf-8'))
+            texts[sha]={'text':text,'normalizedTextSHA256':sha}
             notices.append({'path':path.relative_to(root).as_posix(),'sha256':sha})
         if not any(re.match(r'^(licen[cs]e|copying)',Path(n['path']).name,re.I) for n in notices):
             raise ValueError('Selected module has no license file: '+key[0])
         result.append({'module':key[0],'version':key[1],'importedPackages':sorted(set(component['packages'])),'notices':notices})
-    return {'format':1,'scope':'Complete LICENSE/NOTICE/COPYING/COPYRIGHT/PATENT files from module roots and ancestors of packages in the controller import graph; no test-only or unrelated cache modules. The graph can include code removed by the linker.',
+    return {'format':2,'scope':'Complete LICENSE/NOTICE/COPYING/COPYRIGHT/PATENT files from module roots and ancestors of packages in the controller import graph; UTF-8 text and source-input hashes use canonical LF line endings; no test-only or unrelated cache modules. The graph can include code removed by the linker.',
         'target':{'GOOS':'linux','GOARCH':'amd64','CGO_ENABLED':'0','entrypoint':'./cmd/controller'},'goVersion':go_version,
         'sourceInputs':source_inputs,'components':result,'texts':{k:texts[k] for k in sorted(texts)}}
 
@@ -84,7 +89,7 @@ def main():
     version=go('version');match=re.search(r'\bgo([0-9.]+)\b',version)
     if not match or match[1]!=expected:raise ValueError('Go toolchain differs from pinned go.mod version')
     packages=objects(go('list','-buildvcs=false','-deps','-json','./cmd/controller'))
-    bundle=collect(packages,go('env','GOROOT'),expected,{n:digest((ROOT/n).read_bytes()) for n in ['go.mod','go.sum']})
+    bundle=collect(packages,go('env','GOROOT'),expected,{n:digest(canonical_text((ROOT/n).read_bytes()).encode('utf-8')) for n in ['go.mod','go.sum']})
     data=(json.dumps(bundle,indent=2,ensure_ascii=True)+'\n').encode();path=Path(a.output)
     if a.check:
         if path.read_bytes()!=data:raise ValueError('Notice bundle differs from exact current target dependencies; regenerate and review')

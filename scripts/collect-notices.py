@@ -25,6 +25,25 @@ def canonical_text(data):
     return data.decode('utf-8').replace('\r\n','\n').replace('\r','\n')
 
 
+def mismatch_summary(expected,actual):
+    """Describe notice drift without printing license bodies or local paths."""
+    lines=[]
+    for field in ('format','goVersion','sourceInputs','target'):
+        if expected.get(field)!=actual.get(field):lines.append(f'{field}: committed={expected.get(field)!r} generated={actual.get(field)!r}')
+    def keyed(bundle):return {(x['module'],x['version']):x for x in bundle.get('components',[])}
+    old,new=keyed(expected),keyed(actual)
+    if old.keys()!=new.keys():
+        lines.append(f'components removed={sorted(old.keys()-new.keys())!r} added={sorted(new.keys()-old.keys())!r}')
+    for key in sorted(old.keys()&new.keys()):
+        for field in ('importedPackages','notices'):
+            if old[key].get(field)!=new[key].get(field):
+                before=set(json.dumps(x,sort_keys=True) for x in old[key].get(field,[]));after=set(json.dumps(x,sort_keys=True) for x in new[key].get(field,[]))
+                lines.append(f'{key!r} {field}: removed={sorted(before-after)!r} added={sorted(after-before)!r}')
+    old_texts=set(expected.get('texts',{}));new_texts=set(actual.get('texts',{}))
+    if old_texts!=new_texts:lines.append(f'text hashes removed={sorted(old_texts-new_texts)!r} added={sorted(new_texts-old_texts)!r}')
+    return '\n'.join(lines) or 'serialized form differs despite equivalent summarized fields'
+
+
 def objects(text):
     decoder=json.JSONDecoder();result=[];text=text.lstrip('\ufeff')
     while text.strip():
@@ -92,7 +111,10 @@ def main():
     bundle=collect(packages,go('env','GOROOT'),expected,{n:digest(canonical_text((ROOT/n).read_bytes()).encode('utf-8')) for n in ['go.mod','go.sum']})
     data=(json.dumps(bundle,indent=2,ensure_ascii=True)+'\n').encode();path=Path(a.output)
     if a.check:
-        if path.read_bytes()!=data:raise ValueError('Notice bundle differs from exact current target dependencies; regenerate and review')
+        committed=path.read_bytes()
+        if committed!=data:
+            detail=mismatch_summary(json.loads(committed),bundle)
+            raise ValueError('Notice bundle differs from exact current target dependencies; regenerate and review\n'+detail)
     else:path.write_bytes(data)
     print(json.dumps({'checked':a.check,'components':len(bundle['components']),'noticeFiles':sum(len(c['notices']) for c in bundle['components']),'uniqueTexts':len(bundle['texts']),'sha256':digest(data)}))
 

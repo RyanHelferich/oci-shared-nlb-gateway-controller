@@ -1,0 +1,44 @@
+# VCN-native PodIP evaluation. Replace all placeholders; live acceptance pending.
+apiVersion: nlb.independent.dev/v1alpha1
+kind: NLBPool
+metadata:
+  name: canary
+  namespace: YOUR_TUNNEL_NAMESPACE
+spec:
+  compartmentId: YOUR_COMPARTMENT_OCID
+  subnetId: YOUR_NLB_SUBNET_OCID
+  occupancy: 2
+  maxShards: 2
+  portStart: 20000
+  preserveSource: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tunnel-canary
+  namespace: YOUR_TUNNEL_NAMESPACE
+spec:
+  type: ClusterIP
+  selector:
+    app: YOUR_SINGLE_ACTIVE_TUNNEL_LABEL
+  ports:
+    - name: wg
+      protocol: UDP
+      port: 51820
+      targetPort: 51820
+    - name: health
+      protocol: TCP
+      port: 9901
+      targetPort: 9901
+---
+apiVersion: nlb.independent.dev/v1alpha1
+kind: TunnelBinding
+metadata:
+  name: tunnel-canary
+  namespace: YOUR_TUNNEL_NAMESPACE
+spec:
+  pool: canary
+  service: tunnel-canary
+  portName: wg
+  mode: PodIP
+  healthPort: 9901

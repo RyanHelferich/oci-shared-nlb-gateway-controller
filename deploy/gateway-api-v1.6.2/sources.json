@@ -1,0 +1,26 @@
+{
+  "version": "v1.6.2",
+  "channel": "standard",
+  "files": [
+    {
+      "file": "gatewayclasses.yaml",
+      "source": "https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.6.2/config/crd/standard/gateway.networking.k8s.io_gatewayclasses.yaml",
+      "sha256": "47875d2b4d7491d574ba47116226d9507e287df80463ea2cec64340d7fdae0e9"
+    },
+    {
+      "file": "gateways.yaml",
+      "source": "https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.6.2/config/crd/standard/gateway.networking.k8s.io_gateways.yaml",
+      "sha256": "be942c2d5e2a5cd3adb506e5d19a493e412492b41577b43b49d7075674af9438"
+    },
+    {
+      "file": "udproutes.yaml",
+      "source": "https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.6.2/config/crd/standard/gateway.networking.k8s.io_udproutes.yaml",
+      "sha256": "11170b62761d8e10cdc6c2b17aa15a4a4def3cc7ebb6ebb64d81ce0024776aaa"
+    },
+    {
+      "file": "LICENSE",
+      "source": "https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.6.2/LICENSE",
+      "sha256": "20b6dde626f521dbb384f75e6d96c3d16789df3bf878b58bc2810614fb4db07c"
+    }
+  ]
+}

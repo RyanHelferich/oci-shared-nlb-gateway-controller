@@ -1,0 +1,47 @@
+# Optional NodePortCluster canary. Requires its reviewed controller image and
+# OCI-to-worker UDP NodePort plus HTTP10256/healthz reachability.
+# Reuse the existing installed GatewayClass and trusted workload namespace.
+apiVersion: nlb.independent.dev/v1alpha1
+kind: GatewayPool
+metadata:
+  name: shared-workers
+  namespace: YOUR_TUNNEL_NAMESPACE
+spec:
+  gatewayClassName: oci-native-udp
+  occupancy: 2
+  maxGateways: 2
+  portStart: 20000
+  # Include the maximum simultaneous workers across all pools and surge.
+  maxWorkers: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tunnel-canary-workers
+  namespace: YOUR_TUNNEL_NAMESPACE
+spec:
+  type: NodePort
+  externalTrafficPolicy: Cluster
+  selector:
+    app: YOUR_EXISTING_TUNNEL_LABEL
+  ports:
+    - name: wireguard
+      port: 51820
+      targetPort: 51820
+      protocol: UDP
+      # Kubernetes allocates one NodePort; do not copy a lab port assignment.
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: UDPRoute
+metadata:
+  name: tunnel-canary-workers
+  namespace: YOUR_TUNNEL_NAMESPACE
+  annotations:
+    nlb.independent.dev/pool: shared-workers
+    nlb.independent.dev/backend-mode: NodePortCluster
+    # No workload health-port annotation: native checks use worker HTTP10256.
+spec:
+  rules:
+    - backendRefs:
+        - name: tunnel-canary-workers
+          port: 51820

@@ -1,0 +1,45 @@
+name: Bug report
+description: Report a reproducible controller or tooling defect
+title: "[bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not include credentials, private keys, kubeconfigs, customer names, or live OCI identifiers.
+  - type: input
+    id: version
+    attributes:
+      label: Controller version and image digest
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: OKE, Kubernetes, CNI, and service-proxy versions
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Backend mode
+      options: [NodePortCluster, PodIP]
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Observed behavior and sanitized evidence
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Minimal reproduction steps
+    validations:
+      required: true

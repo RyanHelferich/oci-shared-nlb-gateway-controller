@@ -1,0 +1,13 @@
+.cache/
+.deps/
+bin/
+dist/
+release-input.json
+controller-image.tar
+*.pem
+*.key
+*kubeconfig*
+**/__pycache__/
+.idea/
+.vscode/
+.DS_Store

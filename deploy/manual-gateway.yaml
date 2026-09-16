@@ -1,0 +1,33 @@
+# Alternative to automatic GatewayPool allocation. One Gateway is one OCI NLB.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: explicit-canary
+  namespace: YOUR_TUNNEL_NAMESPACE
+spec:
+  gatewayClassName: oci-native-udp
+  listeners:
+    - name: tunnel-a
+      protocol: UDP
+      port: 20000
+      allowedRoutes:
+        namespaces:
+          from: Same
+        kinds:
+          - kind: UDPRoute
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: UDPRoute
+metadata:
+  name: explicit-canary
+  namespace: YOUR_TUNNEL_NAMESPACE
+  annotations:
+    nlb.independent.dev/health-port: "9901"
+spec:
+  parentRefs:
+    - name: explicit-canary
+      sectionName: tunnel-a
+  rules:
+    - backendRefs:
+        - name: tunnel-canary
+          port: 51820

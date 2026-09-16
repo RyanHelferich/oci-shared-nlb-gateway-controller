@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shared-nlb-controller
+  namespace: shared-nlb
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: shared-nlb-controller}
+  template:
+    metadata:
+      labels: {app: shared-nlb-controller}
+    spec:
+      serviceAccountName: shared-nlb-controller
+      automountServiceAccountToken: true
+      dnsConfig:
+        options:
+          - {name: ndots, value: "1"}
+          - {name: use-vc}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: controller
+          image: REPLACE_WITH_IMPORTED_OR_PRIVATE_REGISTRY_IMAGE_AT_SHA256
+          imagePullPolicy: IfNotPresent
+          env:
+            - {name: OCI_RESOURCE_PRINCIPAL_VERSION, value: "2.2"}
+            - {name: OCI_RESOURCE_PRINCIPAL_REGION, value: us-ashburn-1}
+          args:
+            - --namespace=shared-nlb
+            - --region=us-ashburn-1
+            - --compartment=REPLACE_COMPARTMENT_OCID
+            - --subnet=REPLACE_NLB_SUBNET_OCID
+            - --installation-id=REPLACE_STABLE_INSTALLATION_ID
+            - --auth=workload
+            - --enable-gateway-api
+            - --gateway-class=oci-native-udp
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: "1", memory: 512Mi}
+          ports:
+            - {name: metrics, containerPort: 8080}
+            - {name: health, containerPort: 8081}
+          livenessProbe:
+            httpGet: {path: /healthz, port: health}
+          readinessProbe:
+            httpGet: {path: /readyz, port: health}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels: {app: shared-nlb-controller}
+                topologyKey: kubernetes.io/hostname

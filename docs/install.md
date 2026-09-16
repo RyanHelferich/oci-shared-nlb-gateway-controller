@@ -10,7 +10,7 @@ Start with one non-production route and keep its previous endpoint available for
 - Permit NLB-subnet UDP traffic to the planned NodePort range and TCP 10256 to workers for NodePortCluster.
 - For PodIP only, permit NLB-to-pod UDP and workload TCP health and prove direct pod address routing.
 - Push the controller image into the approved registry and record its immutable manifest digest.
-- For Cilium, finish the [overlay preflight](cilium-overlay.md).
+- For Cilium, finish the [overlay preflight](../Test/02-Cilium-Overlay-OKE-Validation.md#required-configuration).
 
 ## 2. Install Gateway API and project CRDs
 
@@ -84,4 +84,4 @@ Do not publish the Service port or assume the first Gateway listener belongs to 
 
 ## 6. Accept or roll back
 
-Run authenticated bidirectional application probes while exercising pod movement, worker replacement, controller restart, and unrelated control routes. Compare recovery with a written target. Keep the former endpoint until the canary passes. See [testing](testing.md) and [operations](operations.md).
+Run authenticated bidirectional application probes while exercising pod movement, worker replacement, controller restart, and unrelated control routes. Compare recovery with a written target. Keep the former endpoint until the canary passes. See the [VCN-native](../Test/01-VCN-Native-OKE-Validation.md) and [Cilium overlay](../Test/02-Cilium-Overlay-OKE-Validation.md) validation reports plus [operations](operations.md).

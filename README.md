@@ -29,10 +29,10 @@ Internet peer
   -> selected UDP workload pod
 ```
 
-The controller registers eligible worker VNIC addresses as NLB backends. It does not assume that OCI can route directly to overlay pod IPs. Cilium kube-proxy replacement can be used when UDP NodePort handling and the worker health endpoint are configured and tested. See [Cilium overlay validation](docs/cilium-overlay.md).
+The controller registers eligible worker VNIC addresses as NLB backends. It does not assume that OCI can route directly to overlay pod IPs. Cilium kube-proxy replacement can be used when UDP NodePort handling and the worker health endpoint are configured and tested. See [Cilium overlay validation](Test/02-Cilium-Overlay-OKE-Validation.md).
 
 > [!WARNING]
-> The isolated Cilium 1.20.2 canary reproduced Oracle's published OKE issue in which deletion of a duplicate EndpointSlice can remove a still-valid Service backend. Worker `/healthz` remained a separate node-level signal and did not prove that backend existed. Treat [the recorded result](docs/testing.md#cilium-overlay-canary) and Oracle's monitor/restart workaround as a production acceptance gate for the exact OKE and Cilium versions you operate.
+> The isolated Cilium 1.20.2 canary reproduced Oracle's published OKE issue in which deletion of a duplicate EndpointSlice can remove a still-valid Service backend. Worker `/healthz` remained a separate node-level signal and did not prove that backend existed. Treat [the recorded result](Test/02-Cilium-Overlay-OKE-Validation.md#endpointslice-backend-loss-failure) and Oracle's monitor/restart workaround as a production acceptance gate for the exact OKE and Cilium versions you operate.
 
 `PodIP` mode is available for clusters where OCI can route from the NLB subnet directly to pod addresses. It should not be selected for an overlay network without a separately proven route.
 
@@ -134,16 +134,17 @@ How reconciliation works:
 | `examples/` | Copy-and-adapt usage examples |
 | `scripts/` | Installation, packaging, notices, and safe cleanup tools |
 | `docs/` | Architecture, installation, validation, and operations |
+| `Test/` | Consolidated VCN-native and Cilium overlay test evidence |
 | `tests/package/` | Offline packaging and safety checks |
 
 ## Start here
 
 1. Read the [architecture and traffic paths](docs/architecture.md).
 2. Check [compatibility and limitations](docs/compatibility.md).
-3. For overlay networking, complete the [Cilium validation checklist](docs/cilium-overlay.md).
+3. For overlay networking, complete the [Cilium validation checklist](Test/02-Cilium-Overlay-OKE-Validation.md#minimum-production-acceptance-sequence).
 4. Follow [installation](docs/install.md) for a small canary.
 5. Use [operations](docs/operations.md) for rollout, recovery, and retirement.
-6. Review the [published validation summary](docs/testing.md) and repeat the acceptance suite in your environment.
+6. Review the [VCN-native](Test/01-VCN-Native-OKE-Validation.md) or [Cilium overlay](Test/02-Cilium-Overlay-OKE-Validation.md) validation report and repeat its acceptance suite in your environment.
 
 ## Build and test
 

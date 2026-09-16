@@ -39,7 +39,7 @@ def build(release_file, output):
     if digest(image_bytes) != release["imageArchiveSha256"]:
         raise ValueError("image archive checksum does not match release metadata")
     paths = [ROOT / f for f in TOP_FILES]
-    for directory, suffixes in [("api", {".go"}), ("cmd", {".go"}), ("internalcontroller", {".go"}), ("internalgateway", {".go"}), ("internalgatewaypool", {".go"}), ("deploy", {".json", ".yaml"}), ("examples", {".md", ".yaml"}), ("docs", {".md", ".drawio", ".png"})]:
+    for directory, suffixes in [("api", {".go"}), ("cmd", {".go"}), ("internalcontroller", {".go"}), ("internalgateway", {".go"}), ("internalgatewaypool", {".go"}), ("deploy", {".json", ".yaml"}), ("examples", {".md", ".yaml"}), ("docs", {".md", ".drawio", ".png"}), ("Test", {".md"})]:
         paths += sorted(p for p in (ROOT / directory).rglob("*") if p.is_file() and p.suffix in suffixes)
     paths += [ROOT / "deploy" / "gateway-api-v1.6.2" / "LICENSE"]
     paths += [ROOT / "scripts" / f for f in SCRIPTS]

@@ -1,0 +1,78 @@
+# Supported shape: one selected tunnel workload owns several UDP ports.
+# Replace placeholders and start with one canary. This example uses default PodIP mode.
+apiVersion: v1
+kind: Service
+metadata:
+  name: tunnels-multiport
+  namespace: YOUR_TUNNEL_NAMESPACE
+spec:
+  type: ClusterIP
+  selector:
+    app: YOUR_SINGLE_ACTIVE_MULTIPORT_TUNNEL_LABEL
+  ports:
+    - name: wg-customer-a
+      protocol: UDP
+      port: 51820
+      targetPort: 51820
+    - name: wg-customer-b
+      protocol: UDP
+      port: 51821
+      targetPort: 51821
+    - name: wg-customer-c
+      protocol: UDP
+      port: 51822
+      targetPort: 51822
+    - name: health
+      protocol: TCP
+      port: 9901
+      targetPort: 9901
+---
+# Each public port still needs its own UDPRoute. The allocator assigns the
+# Gateway parent/listener. All three routes may land on the same shared NLB.
+apiVersion: gateway.networking.k8s.io/v1
+kind: UDPRoute
+metadata:
+  name: tunnel-customer-a
+  namespace: YOUR_TUNNEL_NAMESPACE
+  annotations:
+    nlb.independent.dev/pool: shared
+    nlb.independent.dev/health-port: "9901"
+spec:
+  rules:
+    - backendRefs:
+        - name: tunnels-multiport
+          port: 51820
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: UDPRoute
+metadata:
+  name: tunnel-customer-b
+  namespace: YOUR_TUNNEL_NAMESPACE
+  annotations:
+    nlb.independent.dev/pool: shared
+    nlb.independent.dev/health-port: "9901"
+spec:
+  rules:
+    - backendRefs:
+        - name: tunnels-multiport
+          port: 51821
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: UDPRoute
+metadata:
+  name: tunnel-customer-c
+  namespace: YOUR_TUNNEL_NAMESPACE
+  annotations:
+    nlb.independent.dev/pool: shared
+    nlb.independent.dev/health-port: "9901"
+spec:
+  rules:
+    - backendRefs:
+        - name: tunnels-multiport
+          port: 51822
+
+# Important:
+# - The one Service selector applies to every port.
+# - This controller requires one unambiguous active Pod endpoint for the Service.
+# - Each UDP port must resolve to a distinct Pod target port.
+# - Use separate Services when each customer tunnel is a different Pod.

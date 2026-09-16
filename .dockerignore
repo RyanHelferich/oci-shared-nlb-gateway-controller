@@ -1,0 +1,9 @@
+**
+!go.mod
+!go.sum
+!api/**
+!internalcontroller/**
+!internalgateway/**
+!internalgatewaypool/**
+!cmd/**
+!Dockerfile

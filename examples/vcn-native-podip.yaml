@@ -1,0 +1,53 @@
+# Platform resources: create once. Start with a bounded 2 x 2 evaluation.
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: oci-native-udp
+spec:
+  controllerName: nlb.independent.dev/native-udp
+---
+apiVersion: nlb.independent.dev/v1alpha1
+kind: GatewayPool
+metadata:
+  name: shared
+  namespace: YOUR_TUNNEL_NAMESPACE
+spec:
+  gatewayClassName: oci-native-udp
+  occupancy: 2
+  maxGateways: 2
+  portStart: 20000
+---
+# Per tunnel: reuse a suitable existing ClusterIP Service instead if available.
+apiVersion: v1
+kind: Service
+metadata:
+  name: tunnel-canary
+  namespace: YOUR_TUNNEL_NAMESPACE
+spec:
+  type: ClusterIP
+  selector:
+    app: YOUR_SINGLE_ACTIVE_TUNNEL_LABEL
+  ports:
+    - name: wg
+      protocol: UDP
+      port: 51820
+      targetPort: 51820
+    - name: health
+      protocol: TCP
+      port: 9901
+      targetPort: 9901
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: UDPRoute
+metadata:
+  name: tunnel-canary
+  namespace: YOUR_TUNNEL_NAMESPACE
+  annotations:
+    nlb.independent.dev/pool: shared
+    nlb.independent.dev/health-port: "9901"
+spec:
+  # The opt-in OCI allocator assigns parentRefs and a truthful listener port.
+  rules:
+    - backendRefs:
+        - name: tunnel-canary
+          port: 51820

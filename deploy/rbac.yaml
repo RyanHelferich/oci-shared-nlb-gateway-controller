@@ -1,0 +1,78 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: shared-nlb
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: shared-nlb-controller
+  namespace: shared-nlb
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: shared-nlb-controller
+  namespace: shared-nlb
+rules:
+  - apiGroups: [nlb.independent.dev]
+    resources: [nlbpools, tunnelbindings, gatewaypools, nlbpools/status, tunnelbindings/status, gatewaypools/status, nlbpools/finalizers, tunnelbindings/finalizers, gatewaypools/finalizers]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [""]
+    resources: [services, pods]
+    verbs: [get, list, watch]
+  - apiGroups: [gateway.networking.k8s.io]
+    resources: [gateways, gateways/status, gateways/finalizers, udproutes, udproutes/status, udproutes/finalizers]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [get, create]
+  - apiGroups: [discovery.k8s.io]
+    resources: [endpointslices]
+    verbs: [get, list, watch]
+  - apiGroups: [coordination.k8s.io]
+    resources: [leases]
+    verbs: [get, list, watch, create, update, patch]
+  - apiGroups: [""]
+    resources: [events]
+    verbs: [create, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: shared-nlb-controller
+  namespace: shared-nlb
+subjects:
+  - kind: ServiceAccount
+    name: shared-nlb-controller
+    namespace: shared-nlb
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: shared-nlb-controller
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: shared-nlb-nodes-shared-nlb
+rules:
+  - apiGroups: [""]
+    resources: [nodes]
+    verbs: [get, list, watch]
+  - apiGroups: [gateway.networking.k8s.io]
+    resources: [gatewayclasses, gatewayclasses/status]
+    resourceNames: [oci-native-udp]
+    verbs: [get, patch, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: shared-nlb-nodes-shared-nlb
+subjects:
+  - kind: ServiceAccount
+    name: shared-nlb-controller
+    namespace: shared-nlb
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: shared-nlb-nodes-shared-nlb

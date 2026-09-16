@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.8'
+          cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Go tests
+        run: go test -count=1 ./...
+      - name: Go vet
+        run: go vet ./...
+      - name: Package and installer tests
+        run: python tests/package/test_tools.py
+      - name: Dependency notices
+        run: python scripts/collect-notices.py --check
+      - name: Public-tree disclosure and link audit
+        run: python scripts/audit-public.py
+      - name: Build controller
+        run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -buildvcs=false -o /tmp/controller ./cmd/controller

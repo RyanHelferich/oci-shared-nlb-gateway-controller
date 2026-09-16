@@ -43,16 +43,17 @@ flowchart TB
   api -. watch .-> ctl
   ctl -. OCI API .-> nlb
 
-  classDef external fill:#fff2cc,stroke:#b8860b,color:#222;
-  classDef oci fill:#e4d7f5,stroke:#6f42c1,color:#222;
-  classDef oke fill:#d9eaf7,stroke:#2563a6,color:#222;
-  classDef network fill:#d7eef7,stroke:#247a91,color:#222;
-  classDef workload fill:#d9eaf7,stroke:#2563a6,color:#222;
-  classDef k8s fill:#e8edf3,stroke:#526579,color:#222;
-  classDef controller fill:#d9ead3,stroke:#38761d,color:#222;
-  style internet fill:#fffdf2,stroke:#b8860b
-  style oci fill:#f8f5fc,stroke:#6f42c1
-  style oke fill:#f3f8fc,stroke:#2563a6
+  classDef external fill:#fef3c7,stroke:#d97706,color:#451a03,stroke-width:2px;
+  classDef oci fill:#ede9fe,stroke:#7c3aed,color:#2e1065,stroke-width:2px;
+  classDef oke fill:#e0f2fe,stroke:#0284c7,color:#0c4a6e,stroke-width:2px;
+  classDef network fill:#cffafe,stroke:#0891b2,color:#164e63,stroke-width:2px;
+  classDef workload fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px;
+  classDef k8s fill:#e2e8f0,stroke:#475569,color:#0f172a,stroke-width:2px;
+  classDef controller fill:#d1fae5,stroke:#059669,color:#064e3b,stroke-width:2px;
+  style internet fill:#fffbeb,stroke:#d97706,stroke-width:2px,color:#451a03
+  style oci fill:#f5f3ff,stroke:#7c3aed,stroke-width:2px,color:#4c1d95
+  style oke fill:#f0f9ff,stroke:#0284c7,stroke-width:2px,color:#0c4a6e
+  linkStyle default stroke:#64748b,stroke-width:2px;
 ```
 
 The NLB has one listener and one backend set per `UDPRoute`. Every admitted worker is a backend for that route, using the Service's allocated NodePort. Cilium selects the actual ready pod. Worker health is HTTP `/healthz` on TCP 10256.

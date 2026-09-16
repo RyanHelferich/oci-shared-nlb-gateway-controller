@@ -471,16 +471,16 @@
       ],
       "notices": [
         {
-          "path": "internal/github.com/golang/gddo/LICENSE",
-          "sha256": "dfffb9ec737eaba985243e95a549bd8c3a4d462032cfe603e2a6704c346427b6"
-        },
-        {
           "path": "LICENSE",
           "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
         },
         {
           "path": "NOTICE",
           "sha256": "8548bfb2bc1913396df38c548a6ec60b8dbcac3b0800485a40569c8bdd184471"
+        },
+        {
+          "path": "internal/github.com/golang/gddo/LICENSE",
+          "sha256": "dfffb9ec737eaba985243e95a549bd8c3a4d462032cfe603e2a6704c346427b6"
         }
       ]
     },
@@ -1685,6 +1685,10 @@
       ],
       "notices": [
         {
+          "path": "LICENSE",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        },
+        {
           "path": "internal/third_party/forked/golang/LICENSE",
           "sha256": "dd26a7abddd02e2d0aba97805b31f248ef7835d9e10da289b22e3b8ab78b324d"
         },
@@ -1693,20 +1697,16 @@
           "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc"
         },
         {
-          "path": "LICENSE",
-          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
-        },
-        {
-          "path": "third_party/forked/golang/btree/LICENSE",
-          "sha256": "58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd"
-        },
-        {
           "path": "third_party/forked/golang/LICENSE",
           "sha256": "dd26a7abddd02e2d0aba97805b31f248ef7835d9e10da289b22e3b8ab78b324d"
         },
         {
           "path": "third_party/forked/golang/PATENTS",
           "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc"
+        },
+        {
+          "path": "third_party/forked/golang/btree/LICENSE",
+          "sha256": "58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd"
         }
       ]
     },

@@ -89,6 +89,7 @@ def collect(packages,goroot,go_version,source_inputs):
             text=canonical_text(path.read_bytes());sha=digest(text.encode('utf-8'))
             texts[sha]={'text':text,'normalizedTextSHA256':sha}
             notices.append({'path':path.relative_to(root).as_posix(),'sha256':sha})
+        notices.sort(key=lambda item:item['path'])
         if not any(re.match(r'^(licen[cs]e|copying)',Path(n['path']).name,re.I) for n in notices):
             raise ValueError('Selected module has no license file: '+key[0])
         result.append({'module':key[0],'version':key[1],'importedPackages':sorted(set(component['packages'])),'notices':notices})

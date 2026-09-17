@@ -33,7 +33,7 @@ VCN-native clusters may also use `NodePortCluster` when the operator prefers the
 The Service and EndpointSlice identify the ready workload. The controller programs that VCN-native pod address directly into the NLB backend set. UDP packets never traverse the controller.
 
 ```mermaid
-flowchart LR
+flowchart TB
   subgraph dataplane["UDP DATA PATH"]
     direction TB
     peer["1 · Internet UDP peer<br/>connects to public IP:port"]:::external
@@ -52,31 +52,16 @@ flowchart LR
     nlb ==> pod
   end
 
-  subgraph control["CONTROL PLANE · no workload packets"]
-    direction TB
-    desired["Kubernetes state<br/>UDPRoute · Service · EndpointSlice"]:::k8s
-    ctl["Shared NLB controller<br/>validate · allocate · reconcile"]:::controller
-    ociapi["OCI NLB API<br/>programs the NLB in the data lane"]:::ociapi
-
-    desired -.-> ctl
-    ctl -.-> ociapi
-  end
-
   classDef external fill:#fff7ed,stroke:#ea580c,color:#7c2d12,stroke-width:2px;
   classDef oci fill:#f3e8ff,stroke:#7e22ce,color:#3b0764,stroke-width:2px;
-  classDef ociapi fill:#ede9fe,stroke:#6d28d9,color:#2e1065,stroke-width:2px;
-  classDef k8s fill:#e2e8f0,stroke:#475569,color:#0f172a,stroke-width:2px;
-  classDef controller fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:2px;
   classDef workload fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px;
   style dataplane fill:#eff6ff,stroke:#2563eb,stroke-width:2px,color:#1e3a8a
   style vcn fill:#faf5ff,stroke:#9333ea,stroke-width:2px,color:#3b0764
   style oke fill:#eff6ff,stroke:#0284c7,stroke-width:2px,color:#0c4a6e
-  style control fill:#f8fafc,stroke:#64748b,stroke-width:2px,color:#0f172a
   linkStyle 0,1 stroke:#2563eb,stroke-width:4px;
-  linkStyle 2,3 stroke:#64748b,stroke-width:2px;
 ```
 
-**Left lane:** customer UDP traffic. **Right lane:** the controller reads Kubernetes state and programs the NLB through the OCI API.
+**Packet path:** public listener → VCN-native pod address. The controller programs this path through the OCI API but never receives the UDP packets. Its shared control flow is shown in [Controller architecture and reconciliation](#controller-architecture-and-reconciliation).
 
 See the measured [VCN-native OKE validation](Test/01-VCN-Native-OKE-Validation.md).
 
@@ -85,7 +70,7 @@ See the measured [VCN-native OKE validation](Test/01-VCN-Native-OKE-Validation.m
 The controller registers eligible worker VNIC addresses and the Service's allocated UDP NodePort. Cilium performs the final Service lookup and local or cross-node overlay delivery.
 
 ```mermaid
-flowchart LR
+flowchart TB
   subgraph dataplane["UDP DATA PATH"]
     direction TB
     peer["1 · Internet UDP peer<br/>connects to public IP:port"]:::external
@@ -108,33 +93,18 @@ flowchart LR
     cilium ==> pod
   end
 
-  subgraph control["CONTROL PLANE · no workload packets"]
-    direction TB
-    desired["Kubernetes state<br/>UDPRoute · NodePort Service · Nodes"]:::k8s
-    ctl["Shared NLB controller<br/>validate · allocate · reconcile"]:::controller
-    ociapi["OCI NLB API<br/>programs the NLB in the data lane"]:::ociapi
-
-    desired -.-> ctl
-    ctl -.-> ociapi
-  end
-
   classDef external fill:#fff7ed,stroke:#ea580c,color:#7c2d12,stroke-width:2px;
   classDef oci fill:#f3e8ff,stroke:#7e22ce,color:#3b0764,stroke-width:2px;
-  classDef ociapi fill:#ede9fe,stroke:#6d28d9,color:#2e1065,stroke-width:2px;
-  classDef k8s fill:#e2e8f0,stroke:#475569,color:#0f172a,stroke-width:2px;
-  classDef controller fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:2px;
   classDef worker fill:#cffafe,stroke:#0891b2,color:#164e63,stroke-width:2px;
   classDef network fill:#ccfbf1,stroke:#0f766e,color:#134e4a,stroke-width:2px;
   classDef workload fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px;
   style dataplane fill:#eff6ff,stroke:#2563eb,stroke-width:2px,color:#1e3a8a
   style vcn fill:#faf5ff,stroke:#9333ea,stroke-width:2px,color:#3b0764
   style oke fill:#ecfeff,stroke:#0891b2,stroke-width:2px,color:#164e63
-  style control fill:#f8fafc,stroke:#64748b,stroke-width:2px,color:#0f172a
   linkStyle 0,1,2,3 stroke:#2563eb,stroke-width:4px;
-  linkStyle 4,5 stroke:#64748b,stroke-width:2px;
 ```
 
-**Left lane:** customer UDP traffic through workers and Cilium. **Right lane:** the controller reads Kubernetes state and programs the NLB through the OCI API.
+**Packet path:** public listener → worker NodePort → Cilium → overlay pod. The controller programs the NLB and worker backend membership but never receives the UDP packets. Its shared control flow is shown in [Controller architecture and reconciliation](#controller-architecture-and-reconciliation).
 
 See the measured [Cilium overlay OKE validation](Test/02-Cilium-Overlay-OKE-Validation.md).
 

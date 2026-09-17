@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["image", "oci", "installationId", "gatewayAPI", "gatewayPool"],
+  "properties": {
+    "replicaCount": {"type": "integer", "minimum": 1, "maximum": 10},
+    "image": {
+      "type": "object",
+      "required": ["repository", "digest", "pullPolicy"],
+      "properties": {
+        "repository": {"type": "string"},
+        "digest": {"type": "string", "pattern": "^$|^sha256:[0-9a-f]{64}$"},
+        "pullPolicy": {"enum": ["Always", "IfNotPresent", "Never"]}
+      },
+      "additionalProperties": false
+    },
+    "oci": {
+      "type": "object",
+      "required": ["region", "compartmentId", "subnetId", "authentication"],
+      "properties": {
+        "region": {"type": "string", "minLength": 1},
+        "compartmentId": {"type": "string", "pattern": "^$|^ocid1\\.compartment\\."},
+        "subnetId": {"type": "string", "pattern": "^$|^ocid1\\.subnet\\."},
+        "authentication": {"enum": ["workload", "instance"]}
+      },
+      "additionalProperties": false
+    },
+    "installationId": {"type": "string", "pattern": "^$|^[A-Za-z0-9._-]{1,64}$"},
+    "gatewayAPI": {
+      "type": "object",
+      "required": ["enabled", "className", "createClass"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "className": {"type": "string", "minLength": 1},
+        "createClass": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "gatewayPool": {
+      "type": "object",
+      "required": ["create", "name", "occupancy", "maxGateways", "portStart", "maxWorkers"],
+      "properties": {
+        "create": {"type": "boolean"},
+        "name": {"type": "string", "minLength": 1},
+        "occupancy": {"type": "integer", "minimum": 1, "maximum": 50},
+        "maxGateways": {"type": "integer", "minimum": 1, "maximum": 100},
+        "portStart": {"type": "integer", "minimum": 1024, "maximum": 65535},
+        "maxWorkers": {"type": "integer", "minimum": 1, "maximum": 512}
+      },
+      "additionalProperties": false
+    }
+  }
+}

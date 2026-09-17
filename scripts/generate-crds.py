@@ -4,6 +4,8 @@ from pathlib import Path
 root=Path(__file__).resolve().parents[1]
 out=root/'deploy'
 out.mkdir(exist_ok=True)
+chart_crds=root/'charts'/'oci-shared-nlb-controller'/'crds'
+chart_crds.mkdir(parents=True,exist_ok=True)
 def string():return {'type':'string','minLength':1}
 def integer(lo,hi,default=None):
     d={'type':'integer','minimum':lo,'maximum':hi}
@@ -29,4 +31,6 @@ for kind,plural,props,required in [('NLBPool','nlbpools',pool,['compartmentId','
     crd={'apiVersion':'apiextensions.k8s.io/v1','kind':'CustomResourceDefinition','metadata':{'name':plural+'.nlb.independent.dev'},'spec':{'group':'nlb.independent.dev','scope':'Namespaced','names':{'kind':kind,'listKind':kind+'List','plural':plural,'singular':plural[:-1]},'versions':[{'name':'v1alpha1','served':True,'storage':True,'schema':{'openAPIV3Schema':schema},'subresources':{'status':{}}}]}}
     columns = [('Per-NLB','integer','.spec.occupancy'),('Max-NLBs','integer','.spec.maxShards' if kind=='NLBPool' else '.spec.maxGateways'),('Used-Slots','integer','.status.used'),('Free-Slots','integer','.status.available')] if kind!='TunnelBinding' else [('Pool','string','.spec.pool'),('Public-IP','string','.status.externalIP'),('UDP-Port','integer','.status.externalPort'),('Configured','string',".status.conditions[?(@.type=='Configured')].status")]
     crd['spec']['versions'][0]['additionalPrinterColumns']=[dict(name=n,type=t,jsonPath=p) for n,t,p in columns+[('Age','date','.metadata.creationTimestamp')]]
-    (out/(plural+'.json')).write_text(json.dumps(crd,indent=2)+'\n')
+    content=json.dumps(crd,indent=2)+'\n'
+    (out/(plural+'.json')).write_text(content)
+    (chart_crds/(plural+'.json')).write_text(content)

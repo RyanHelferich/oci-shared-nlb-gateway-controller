@@ -18,7 +18,7 @@ An OCI backend marked healthy proves its health endpoint. It does not prove UDP 
 | Symptom | Check |
 | --- | --- |
 | No UDP handshake | Published Gateway IP and listener port, NLB ingress rules, key/peer configuration, route conditions |
-| NLB backend unhealthy | Worker TCP 10256 health server and security path for NodePortCluster; same-pod TCP health for PodIP |
+| NLB backend unhealthy | Workload TCP health Service and Local NodePort path for NodePortLocal; worker TCP 10256 for NodePortCluster; same-pod TCP health for PodIP |
 | Healthy backend but no traffic | Service NodePort, Cilium service table, ready EndpointSlices, cross-node forwarding, NetworkPolicy, MTU |
 | Route waiting | Service selector, port/protocol, endpoint readiness, single-backend restriction, pool capacity |
 | Pool exhausted | Active plus retired allocations, occupancy, maximum Gateways, OCI quota |
@@ -35,6 +35,8 @@ An OCI backend marked healthy proves its health endpoint. It does not prove UDP 
 6. Confirm one active leader, stable route endpoints, OCI convergence, and continuous application traffic.
 
 Rollback the Deployment image while retaining compatible CRDs and allocation state. Recreating pools is not an image rollback.
+
+The Helm chart is optional. A Helm-managed Deployment and a renderer-managed Deployment must not manage the same installation at the same time. Adopting Helm requires preserving the namespace, ServiceAccount/IAM identity, installation ID, GatewayClass, CRDs, and custom-resource state.
 
 ## Route migration
 

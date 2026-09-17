@@ -69,6 +69,50 @@ func TestClusterRouteRequiresExplicitContract(t *testing.T) {
 	}
 }
 
+func TestLocalRouteUsesOneNodeAndWorkloadHealthNodePort(t *testing.T) {
+	f := setup(t, func(f *fixture) {
+		f.route.Annotations = map[string]string{BackendModeAnnotation: "NodePortLocal", HealthPortAnnotation: "9901"}
+		f.svc.Spec.Type = core.ServiceTypeNodePort
+		f.svc.Spec.ExternalTrafficPolicy = core.ServiceExternalTrafficPolicyLocal
+		f.svc.Spec.Ports[0].NodePort = 30001
+		f.svc.Spec.Ports[1].NodePort = 30901
+	})
+	f.reconcile(t)
+	b := f.binding(t)
+	if b.Spec.Mode != "NodePort" || b.Spec.HealthPort != 30901 || b.Spec.PortName != "wireguard" || b.Spec.Suspended {
+		t.Fatalf("wrong local binding %+v", b.Spec)
+	}
+}
+
+func TestLocalRouteRequiresLocalPolicyAndAllocatedHealth(t *testing.T) {
+	for _, scenario := range []string{"Cluster", "ClusterIP", "missing-udp-nodeport", "missing-health-nodeport", "wrong-health-service-port"} {
+		t.Run(scenario, func(t *testing.T) {
+			f := setup(t, func(f *fixture) {
+				f.route.Annotations = map[string]string{BackendModeAnnotation: "NodePortLocal", HealthPortAnnotation: "9901"}
+				f.svc.Spec.Type = core.ServiceTypeNodePort
+				f.svc.Spec.ExternalTrafficPolicy = core.ServiceExternalTrafficPolicyLocal
+				f.svc.Spec.Ports[0].NodePort = 30001
+				f.svc.Spec.Ports[1].NodePort = 30901
+			})
+			switch scenario {
+			case "Cluster":
+				f.svc.Spec.ExternalTrafficPolicy = core.ServiceExternalTrafficPolicyCluster
+			case "ClusterIP":
+				f.svc.Spec.Type = core.ServiceTypeClusterIP
+			case "missing-udp-nodeport":
+				f.svc.Spec.Ports[0].NodePort = 0
+			case "missing-health-nodeport":
+				f.svc.Spec.Ports[1].NodePort = 0
+			case "wrong-health-service-port":
+				f.route.Annotations[HealthPortAnnotation] = "9902"
+			}
+			if _, err := desiredBinding(f.route, f.g, &f.g.Spec.Listeners[0], f.svc); err == nil {
+				t.Fatal("unsafe local contract accepted")
+			}
+		})
+	}
+}
+
 func TestGatewayWorkerBudgetAndFrozenPool(t *testing.T) {
 	f := setup(t, nil)
 	f.g.Annotations[MaxWorkersAnnotation] = "50"

@@ -1,8 +1,11 @@
 # VCN-native OKE validation: criteria, method, examples, and results
 
+> [!NOTE]
+> The original campaign covered `NodePortCluster` and `PodIP`. A live `NodePortLocal` follow-up on September 17, 2026 added Local traffic policy, workload TCP health, authenticated traffic, health failure, and cross-worker pod recovery evidence.
+
 ## Decision
 
-**Result: passed as a bounded functional evaluation.** The controller programmed shared OCI Network Load Balancers from Kubernetes Gateway API resources, isolated independent UDP tunnel identities, preserved existing traffic through controller interruption, recovered through pod and worker replacement, allocated 50+1 listeners across two NLBs, and carried 49 simultaneous low-rate tunnel streams without an application failure.
+**Result: passed as a bounded functional evaluation.** The controller programmed shared OCI Network Load Balancers from Kubernetes Gateway API resources, isolated independent UDP tunnel identities, preserved existing traffic through controller interruption, recovered through pod and worker replacement, allocated 50+1 listeners across two NLBs, and carried 49 simultaneous low-rate tunnel streams without an application failure. The later `NodePortLocal` canary also kept exactly one worker backend, used workload TCP health, and changed that backend when the pod moved to the other worker.
 
 This result demonstrates the controller and OCI integration in the tested environment. It does not establish production bandwidth, an application-specific recovery objective, 1,200 active tunnels, or compatibility with an untested cluster build.
 
@@ -76,8 +79,24 @@ An NLB health check or `Programmed=True` condition could support a result but co
 | VCN-16 | Idle behavior must be measured, not assumed | 150-second capture with no application traffic, then reverse-first and client-first requests | **Mixed by design.** First reverse request timed out; first client request and next reverse request succeeded. This proves client-initiated recovery, not reliable server-first delivery after idle |
 | VCN-17 | Cleanup must remove only owned objects | Routes, generated children, peers, pools, and temporary NLBs retired through normal finalizers and ownership checks | **Passed.** Active-scale cleanup removed 185/185 direct/generated objects and both temporary NLBs; protected retirement ledgers remained |
 | VCN-18 | Package and permissions must be reproducible and bounded | Offline package checks, server-side CRD dry runs, scoped IAM, dependency review, and clean-room tooling | **Partial.** Packaging and guards passed; final extracted-package live installation was prepared but not executed |
+| VCN-19 | Local traffic policy must register only the worker with the ready pod | Created a `NodePort` Service with `externalTrafficPolicy: Local`, one ready endpoint, and a `NodePortLocal` UDPRoute | **Passed.** OCI contained exactly one backend: the selected endpoint's worker and allocated UDP NodePort |
+| VCN-20 | NLB health must reach the workload rather than only the node proxy | Added a TCP health port to the same Service and stopped the workload | **Passed.** The OCI backend changed from `OK` to `CRITICAL` in the observed five-sample window, then returned to `OK` after recovery |
+| VCN-21 | A pod move must replace the one-worker backend and recover traffic | Restarted the workload; Kubernetes placed it on the other worker | **Passed.** OCI replaced worker A with worker B, retained one backend, reported TCP health `OK`, and three consecutive authenticated requests passed after tunnel warm-up |
 
 ## Key measured results
+
+### NodePortLocal follow-up
+
+The September 17, 2026 follow-up used one `NodePort` Service with `externalTrafficPolicy: Local`, one UDP NodePort, and one TCP health NodePort. The controller translated the public `NodePortLocal` mode into its durable `NodePort` binding and programmed one worker backend.
+
+- Initial state: one ready endpoint on worker A, one matching OCI backend, UDP NodePort forwarding, TCP workload health, aggregate and per-backend health `OK`.
+- Data path: three consecutive authenticated WireGuard application requests returned the expected workload identity.
+- Failure: scaling the workload to zero removed the endpoint and OCI health changed from `OK` to `CRITICAL` after the configured health retries.
+- Recovery and move: Kubernetes recreated the pod on worker B. The controller replaced the backend IP while preserving the listener, public port, UDP NodePort, and one-backend cardinality.
+- Recovered data path: after tunnel handshake warm-up, three consecutive authenticated requests passed.
+- Cleanup: Kubernetes objects were retired normally; the deliberately retained empty test NLB was then deleted with an exact ownership and empty-resource check.
+
+This is functional and recovery evidence. It is not a bandwidth measurement.
 
 ### Shared forwarding and isolation
 
@@ -222,6 +241,7 @@ Use the repository examples for complete placeholder manifests:
 - Recovery measurements are observations from one test environment, not service-level guarantees.
 - Direct PodIP requires proven NLB-to-pod routing and should not be inferred from the phrase VCN-native alone.
 - NodePortCluster consumes one NodePort per route and one NLB backend per admitted worker per route.
+- NodePortLocal consumes one UDP NodePort and one TCP health NodePort per Service while keeping one steady-state NLB backend per route.
 - Registry pulls during worker replacement were not accepted as a separate production gate.
 - Final installation from a newly extracted release archive was not run live.
 - Operators must repeat security, quota, MTU, policy, application, and recovery tests on their exact build.

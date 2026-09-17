@@ -1,0 +1,149 @@
+{
+  "apiVersion": "apiextensions.k8s.io/v1",
+  "kind": "CustomResourceDefinition",
+  "metadata": {
+    "name": "tunnelbindings.nlb.independent.dev"
+  },
+  "spec": {
+    "group": "nlb.independent.dev",
+    "scope": "Namespaced",
+    "names": {
+      "kind": "TunnelBinding",
+      "listKind": "TunnelBindingList",
+      "plural": "tunnelbindings",
+      "singular": "tunnelbinding"
+    },
+    "versions": [
+      {
+        "name": "v1alpha1",
+        "served": true,
+        "storage": true,
+        "schema": {
+          "openAPIV3Schema": {
+            "type": "object",
+            "properties": {
+              "apiVersion": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "metadata": {
+                "type": "object"
+              },
+              "spec": {
+                "type": "object",
+                "properties": {
+                  "pool": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "service": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "portName": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "NodePort",
+                      "PodIP",
+                      "NodePortCluster"
+                    ],
+                    "default": "NodePort"
+                  },
+                  "healthPort": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 65535
+                  },
+                  "requestedPort": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 65535
+                  },
+                  "suspended": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "pool",
+                  "service",
+                  "portName",
+                  "mode",
+                  "healthPort"
+                ],
+                "x-kubernetes-validations": [
+                  {
+                    "rule": "self.pool == oldSelf.pool",
+                    "message": "pool is immutable; create a new resource for migration"
+                  },
+                  {
+                    "rule": "self.service == oldSelf.service",
+                    "message": "service is immutable; create a new resource for migration"
+                  },
+                  {
+                    "rule": "self.portName == oldSelf.portName",
+                    "message": "portName is immutable; create a new resource for migration"
+                  },
+                  {
+                    "rule": "self.mode == oldSelf.mode",
+                    "message": "mode is immutable; create a new resource for migration"
+                  },
+                  {
+                    "rule": "has(self.requestedPort) == has(oldSelf.requestedPort) && (!has(self.requestedPort) || self.requestedPort == oldSelf.requestedPort)",
+                    "message": "requestedPort is immutable; create a new resource for migration"
+                  },
+                  {
+                    "rule": "self.mode != 'NodePortCluster' || self.healthPort == 10256",
+                    "message": "NodePortCluster uses fixed kube-proxy health port 10256"
+                  }
+                ]
+              },
+              "status": {
+                "type": "object",
+                "x-kubernetes-preserve-unknown-fields": true
+              }
+            },
+            "required": [
+              "spec"
+            ]
+          }
+        },
+        "subresources": {
+          "status": {}
+        },
+        "additionalPrinterColumns": [
+          {
+            "name": "Pool",
+            "type": "string",
+            "jsonPath": ".spec.pool"
+          },
+          {
+            "name": "Public-IP",
+            "type": "string",
+            "jsonPath": ".status.externalIP"
+          },
+          {
+            "name": "UDP-Port",
+            "type": "integer",
+            "jsonPath": ".status.externalPort"
+          },
+          {
+            "name": "Configured",
+            "type": "string",
+            "jsonPath": ".status.conditions[?(@.type=='Configured')].status"
+          },
+          {
+            "name": "Age",
+            "type": "date",
+            "jsonPath": ".metadata.creationTimestamp"
+          }
+        ]
+      }
+    ]
+  }
+}

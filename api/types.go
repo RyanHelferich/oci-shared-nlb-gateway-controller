@@ -68,8 +68,8 @@ type BindingSpec struct {
 	Pool          string `json:"pool"`
 	Service       string `json:"service"`
 	PortName      string `json:"portName"`
-	Mode          string `json:"mode"`                    // NodePort (default) or PodIP; immutable after allocation.
-	HealthPort    int    `json:"healthPort"`              // TCP NodePort in NodePort mode; TCP pod target port in PodIP mode.
+	Mode          string `json:"mode"`                    // NodePort, PodIP, or NodePortCluster; immutable after allocation.
+	HealthPort    int    `json:"healthPort"`              // TCP NodePort in NodePort; pod target in PodIP; 10256 in NodePortCluster.
 	RequestedPort int    `json:"requestedPort,omitempty"` // Required only for Explicit pools; immutable after allocation.
 	Suspended     bool   `json:"suspended,omitempty"`     // Fail closed while preserving the allocated endpoint lease.
 }

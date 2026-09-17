@@ -15,7 +15,7 @@
 
 The controller is a control-plane component. It never terminates UDP sessions and does not read workload keys.
 
-## Overlay-safe NodePortCluster path
+## Preferred NodePortLocal path
 
 ```mermaid
 flowchart TB
@@ -26,19 +26,16 @@ flowchart TB
     nlb[Shared OCI NLB<br/>public IP<br/>listener per route]:::oci
     subgraph oke[OKE cluster]
       ctl[Controller Deployment<br/>programs OCI only]:::controller
-      workerA[Worker A VNIC<br/>UDP NodePort<br/>TCP 10256 health]:::oke
-      workerB[Worker B VNIC<br/>UDP NodePort<br/>TCP 10256 health]:::oke
-      cilium[Cilium service dataplane<br/>kube-proxy replacement]:::network
-      pod[Selected UDP pod]:::workload
+      worker[Selected pod worker VNIC<br/>UDP + TCP health NodePorts]:::oke
+      cilium[Cilium local service dataplane<br/>kube-proxy replacement]:::network
+      pod[One Ready UDP pod<br/>TCP workload health]:::workload
       api[Gateway + UDPRoute + Service]:::k8s
     end
   end
 
   peer -->|encrypted UDP| nlb
-  nlb -->|same route NodePort| workerA
-  nlb -->|same route NodePort| workerB
-  workerA --> cilium
-  workerB --> cilium
+  nlb -->|UDP or TCP health NodePort| worker
+  worker --> cilium
   cilium --> pod
   api -. watch .-> ctl
   ctl -. OCI API .-> nlb
@@ -56,7 +53,9 @@ flowchart TB
   linkStyle default stroke:#64748b,stroke-width:2px;
 ```
 
-The NLB has one listener and one backend set per `UDPRoute`. Every admitted worker is a backend for that route, using the Service's allocated NodePort. Cilium selects the actual ready pod. Worker health is HTTP `/healthz` on TCP 10256.
+The NLB has one listener and one backend set per `UDPRoute`. The controller verifies exactly one ready pod and registers only that pod's ready worker, using the allocated UDP NodePort. OCI TCP health traverses a second Local NodePort to the workload. On pod movement the controller changes the NLB backend worker.
+
+`NodePortCluster` remains available as an all-worker compatibility path. It registers every admitted worker, uses cross-node service forwarding, and health-checks worker HTTP `:10256/healthz`. That signal does not prove the route's workload backend exists.
 
 ## Direct PodIP path
 
@@ -66,7 +65,9 @@ The NLB has one listener and one backend set per `UDPRoute`. Every admitted work
 
 - One generated `Gateway` corresponds to one OCI NLB.
 - One active route consumes one NLB listener and one backend set.
-- OCI permits 50 listeners/backend sets per NLB; the default pool occupancy is 45 to retain five operational slots.
+- OCI permits 50 listeners/backend sets per NLB. The CRD default occupancy is 45 to retain five configuration slots; the optional Helm pilot starts at 8 until capacity is validated.
+- Listener occupancy is not a throughput result. Use [NLB capacity planning](capacity-planning.md) to select a smaller value when traffic demands it.
+- NodePortLocal creates one steady-state NLB backend per route because it requires exactly one ready workload endpoint.
 - NodePortCluster creates one NLB backend per admitted worker for every active route. The controller requires `occupancy × maxWorkers <= 1024`.
 - Retired ports remain tombstoned. They are not automatically reused because a former endpoint may remain cached outside the cluster.
 - A newly allocated route receives the next available port from `GatewayPool.spec.portStart`.

@@ -1,0 +1,15 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "oci-shared-nlb-controller.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "oci-shared-nlb-controller.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "oci-shared-nlb-controller.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "oci-shared-nlb-controller.fullname" . }}

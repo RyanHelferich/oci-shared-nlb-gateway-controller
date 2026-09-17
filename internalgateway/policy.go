@@ -140,15 +140,17 @@ func desiredBinding(route *gateway.UDPRoute, g *gateway.Gateway, listener *gatew
 	if mode == "" {
 		mode = "PodIP"
 	}
-	if mode != "PodIP" && mode != "NodePortCluster" {
+	if mode != "PodIP" && mode != "NodePortCluster" && mode != "NodePortLocal" {
 		return api.BindingSpec{}, fmt.Errorf("unsupported backend-mode")
 	}
 	serviceTypeOK := (svc.Spec.Type == "" || svc.Spec.Type == core.ServiceTypeClusterIP)
 	if mode == "NodePortCluster" {
 		serviceTypeOK = svc.Spec.Type == core.ServiceTypeNodePort && svc.Spec.ExternalTrafficPolicy == core.ServiceExternalTrafficPolicyCluster
+	} else if mode == "NodePortLocal" {
+		serviceTypeOK = svc.Spec.Type == core.ServiceTypeNodePort && svc.Spec.ExternalTrafficPolicy == core.ServiceExternalTrafficPolicyLocal
 	}
 	if svc.Name != name || svc.Namespace != route.Namespace || svc.UID == "" || !svc.DeletionTimestamp.IsZero() || !serviceTypeOK || len(svc.Spec.Selector) == 0 || svc.Spec.PublishNotReadyAddresses {
-		return api.BindingSpec{}, fmt.Errorf("backend must be a live selector-backed ClusterIP Service with Ready endpoints")
+		return api.BindingSpec{}, fmt.Errorf("backend must be a live selector-backed Service with the mode's traffic policy and Ready endpoints")
 	}
 	health, err := strconv.Atoi(route.Annotations[HealthPortAnnotation])
 	if mode == "NodePortCluster" {
@@ -163,17 +165,27 @@ func desiredBinding(route *gateway.UDPRoute, g *gateway.Gateway, listener *gatew
 	selected := ""
 	matches := 0
 	healthFound := false
+	healthMatches := 0
+	healthNodePort := int32(0)
 	for _, p := range svc.Spec.Ports {
 		if p.Protocol == core.ProtocolUDP && int(p.Port) == port {
-			if mode == "NodePortCluster" && (p.NodePort < 1 || p.NodePort > 65535) {
-				return api.BindingSpec{}, fmt.Errorf("NodePortCluster requires an allocated UDP NodePort")
+			if (mode == "NodePortCluster" || mode == "NodePortLocal") && (p.NodePort < 1 || p.NodePort > 65535) {
+				return api.BindingSpec{}, fmt.Errorf("%s requires an allocated UDP NodePort", mode)
 			}
 			selected = p.Name
 			matches++
 		}
+		if mode == "NodePortLocal" && p.Protocol == core.ProtocolTCP && int(p.Port) == health {
+			if p.NodePort < 1 || p.NodePort > 65535 {
+				return api.BindingSpec{}, fmt.Errorf("NodePortLocal requires an allocated TCP health NodePort")
+			}
+			healthFound = true
+			healthMatches++
+			healthNodePort = p.NodePort
+		}
 		// Named target ports are resolved and checked against the actual owned Pod
 		// and EndpointSlice by the sole cloud-writing core reconciler.
-		if p.Protocol == core.ProtocolTCP && (p.TargetPort.StrVal != "" || int(p.TargetPort.IntVal) == health || (p.TargetPort.IntVal == 0 && int(p.Port) == health)) {
+		if mode == "PodIP" && p.Protocol == core.ProtocolTCP && (p.TargetPort.StrVal != "" || int(p.TargetPort.IntVal) == health || (p.TargetPort.IntVal == 0 && int(p.Port) == health)) {
 			healthFound = true
 		}
 	}
@@ -181,7 +193,15 @@ func desiredBinding(route *gateway.UDPRoute, g *gateway.Gateway, listener *gatew
 		return api.BindingSpec{}, fmt.Errorf("backend port must identify one named UDP Service port")
 	}
 	if !healthFound && mode != "NodePortCluster" {
-		return api.BindingSpec{}, fmt.Errorf("Service must expose a TCP target for the pod health port")
+		return api.BindingSpec{}, fmt.Errorf("Service must expose the annotated TCP health port")
 	}
-	return api.BindingSpec{Pool: PoolName(g.UID), Service: name, PortName: selected, Mode: mode, HealthPort: health, RequestedPort: int(listener.Port)}, nil
+	if mode == "NodePortLocal" && healthMatches != 1 {
+		return api.BindingSpec{}, fmt.Errorf("NodePortLocal requires exactly one annotated TCP health Service port")
+	}
+	bindingMode := mode
+	if mode == "NodePortLocal" {
+		bindingMode = "NodePort"
+		health = int(healthNodePort)
+	}
+	return api.BindingSpec{Pool: PoolName(g.UID), Service: name, PortName: selected, Mode: bindingMode, HealthPort: health, RequestedPort: int(listener.Port)}, nil
 }

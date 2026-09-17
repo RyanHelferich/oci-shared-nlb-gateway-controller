@@ -1,0 +1,15 @@
+{{- if and .Values.gatewayAPI.enabled .Values.gatewayPool.create }}
+apiVersion: nlb.independent.dev/v1alpha1
+kind: GatewayPool
+metadata:
+  name: {{ .Values.gatewayPool.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "oci-shared-nlb-controller.labels" . | nindent 4 }}
+spec:
+  gatewayClassName: {{ .Values.gatewayAPI.className }}
+  occupancy: {{ .Values.gatewayPool.occupancy }}
+  maxGateways: {{ .Values.gatewayPool.maxGateways }}
+  portStart: {{ .Values.gatewayPool.portStart }}
+  maxWorkers: {{ .Values.gatewayPool.maxWorkers }}
+{{- end }}

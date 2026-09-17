@@ -2,7 +2,10 @@
 
 ## Decision
 
-**Result: core controller and packet path passed; production acceptance is blocked for the tested platform combination.** The canary proved OCI NLB to worker NodePort, Cilium eBPF service lookup, cross-node VXLAN forwarding, a three-port Service, pod movement, NetworkPolicy enforcement, payload delivery, controller independence, and sequential-agent recovery.
+> [!NOTE]
+> The original campaign used `NodePortCluster`. A live `NodePortLocal` follow-up on September 17, 2026 added Local traffic policy, one-worker backend selection, workload TCP health, authenticated overlay traffic, and health failure/recovery evidence. The exact duplicate-EndpointSlice churn case still must be repeated in Local mode.
+
+**Result: core controller and packet path passed; production acceptance is blocked for the tested platform combination.** The canary proved OCI NLB to worker NodePort, Cilium eBPF service lookup, cross-node VXLAN forwarding, a three-port Service, pod movement, NetworkPolicy enforcement, payload delivery, controller independence, and sequential-agent recovery. The follow-up proved the preferred `NodePortLocal` path with exactly one selected worker and a TCP health check that traversed the workload Service.
 
 A guarded duplicate-EndpointSlice deletion reproduced Oracle's documented OKE/Cilium service-backend-loss failure. Both agents lost a still-valid backend while node health remained green. The final state recovered, but the exact OKE 1.34.10 and Cilium 1.20.2 combination should not be accepted for production until a fixed version or a reviewed monitor-and-restart control passes the same matrix.
 
@@ -89,10 +92,31 @@ Every admitted worker must:
 | CIL-17 | Every original Cilium worker must be replaced | Not run in the Cilium campaign | **Pending** |
 | CIL-18 | Planned concurrent scale and worker-backend budget must pass | Three-route canary only | **Pending.** The separate 49-tunnel result belongs to VCN-native OKE and must not be relabeled as Cilium evidence |
 | CIL-19 | Migration, rollback, and cleanup must preserve unrelated routes | Final canary remained healthy; complete Cilium campaign retirement was not executed | **Pending as a full acceptance case** |
+| CIL-20 | Local traffic policy must register only the ready pod's worker | Created a separate Local Service and `NodePortLocal` route for the existing one-pod workload | **Passed.** OCI had exactly one backend with the selected worker IP and allocated UDP NodePort |
+| CIL-21 | Workload TCP health must gate the backend | OCI checked the Service's allocated TCP health NodePort; workload scaled to zero and back to one | **Passed.** Aggregate and per-backend health changed `OK` → `CRITICAL` → `OK` |
+| CIL-22 | Authenticated traffic must traverse Cilium's Local NodePort | External WireGuard client used the new NLB endpoint; pod capture observed bidirectional UDP | **Passed.** Ping succeeded and three consecutive identity-checked HTTP requests returned the expected workload response |
+| CIL-23 | A Local-mode pod move must replace the one backend | Moved the pod from worker A to worker B, then read EndpointSlice, OCI backend, health, and application state | **Passed.** OCI retained one backend, replaced A with B, returned health to `OK`, and three authenticated requests passed |
 
 `Pending` and `Partial` are not passes.
 
 ## Exact executed results
+
+### NodePortLocal follow-up
+
+The September 17, 2026 follow-up used Cilium 1.20.2 with kube-proxy replacement, one overlay pod, and a separate `NodePort` Service configured with `externalTrafficPolicy: Local`.
+
+- Kubernetes exposed one UDP NodePort and one TCP health NodePort.
+- The ready EndpointSlice contained one pod on worker A.
+- OCI contained exactly one backend: worker A and the UDP NodePort.
+- The OCI health checker used TCP and the workload health NodePort; aggregate and backend health were `OK`.
+- Cilium's service table mapped both Local NodePorts to the ready overlay pod.
+- A pod packet capture observed bidirectional WireGuard UDP after NLB and Cilium translation.
+- The external client passed tunnel ping plus three consecutive authenticated application requests.
+- Scaling the workload to zero changed OCI health from `OK` to `CRITICAL`; restoring it returned health to `OK` and three recovery requests passed.
+- Moving the pod to worker B caused a temporary `UNKNOWN` health period. The controller replaced worker A with worker B while retaining one backend; aggregate and backend health reached `OK`, and three authenticated requests passed through the moved pod.
+- Retirement removed the route, listener, backend set, and Kubernetes objects. The empty retained test NLB was deleted after an ownership check.
+
+The first request immediately after changing the WireGuard endpoint timed out before a new handshake completed. Subsequent tunnel ping and authenticated requests passed. The client also learned the recently active canary endpoint through WireGuard endpoint roaming, so retirement required explicitly resetting the peer to its original endpoint. Endpoint-change warm-up and endpoint ownership must therefore be included in migration, dual-path, and recovery procedures.
 
 ### Multi-port Service and healthy baseline
 
@@ -242,6 +266,7 @@ If the chosen version remains affected by the OKE/Cilium EndpointSlice issue, pr
 - Wrong-key and wrong-port isolation were not repeated across three independent Cilium pods.
 - Same-NAT, rebinding, and idle cases remain to be repeated on Cilium.
 - A clean isolated Cilium-agent restart was not measured because the trigger overlapped EndpointSlice deletion.
+- The `NodePortLocal` follow-up did not repeat duplicate-EndpointSlice deletion or Cilium-agent restart.
 - Abrupt Cilium-worker loss and full replacement of every Cilium worker remain pending.
 - The 8 MiB transfer test is not an exhaustive UDP PMTU or throughput result.
 - The workload was a simulator, not a third-party production application.
@@ -249,4 +274,4 @@ If the chosen version remains affected by the OKE/Cilium EndpointSlice issue, pr
 
 ## Final conclusion
 
-The evaluated controller **worked with Cilium overlay and kube-proxy replacement for steady traffic, cross-node NodePort delivery, multi-port routing, controller outage, pod movement, policy enforcement, representative payload, and post-fault recovery**. Production acceptance of the tested OKE/Cilium combination remains blocked by the reproduced EndpointSlice backend-loss defect and the pending worker, scale, isolation, and migration cases above.
+The evaluated controller **worked with Cilium overlay and kube-proxy replacement for steady traffic, cross-node NodePort delivery, multi-port routing, controller outage, pod movement, policy enforcement, representative payload, and post-fault recovery**. The later `NodePortLocal` canary also passed one-worker selection, workload TCP health, authenticated overlay delivery, workload stop/recovery, and a cross-worker pod move. Production acceptance of the tested OKE/Cilium combination remains blocked by the reproduced EndpointSlice backend-loss defect and the pending Local-mode churn, worker, scale, isolation, and migration cases above.

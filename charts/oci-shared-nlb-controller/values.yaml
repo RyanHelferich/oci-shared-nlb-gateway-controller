@@ -1,0 +1,49 @@
+replicaCount: 2
+
+image:
+  repository: ""
+  digest: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+serviceAccount:
+  create: true
+  name: shared-nlb-controller
+  annotations: {}
+
+oci:
+  region: us-ashburn-1
+  compartmentId: ""
+  subnetId: ""
+  authentication: workload
+
+installationId: ""
+
+gatewayAPI:
+  enabled: true
+  className: oci-native-udp
+  createClass: true
+
+gatewayPool:
+  create: false
+  name: shared-udp
+  # Conservative pilot default. Raise only after workload-specific NLB,
+  # worker, CNI, and WireGuard capacity testing.
+  occupancy: 8
+  maxGateways: 27
+  portStart: 20000
+  maxWorkers: 20
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi
+
+podAnnotations: {}
+podLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

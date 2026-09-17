@@ -1,0 +1,181 @@
+{
+  "apiVersion": "apiextensions.k8s.io/v1",
+  "kind": "CustomResourceDefinition",
+  "metadata": {
+    "name": "nlbpools.nlb.independent.dev"
+  },
+  "spec": {
+    "group": "nlb.independent.dev",
+    "scope": "Namespaced",
+    "names": {
+      "kind": "NLBPool",
+      "listKind": "NLBPoolList",
+      "plural": "nlbpools",
+      "singular": "nlbpool"
+    },
+    "versions": [
+      {
+        "name": "v1alpha1",
+        "served": true,
+        "storage": true,
+        "schema": {
+          "openAPIV3Schema": {
+            "type": "object",
+            "properties": {
+              "apiVersion": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "metadata": {
+                "type": "object"
+              },
+              "spec": {
+                "type": "object",
+                "properties": {
+                  "compartmentId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "subnetId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "occupancy": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50,
+                    "default": 45
+                  },
+                  "maxShards": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100,
+                    "default": 2
+                  },
+                  "portStart": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 65535,
+                    "default": 20000
+                  },
+                  "preserveSource": {
+                    "type": "boolean",
+                    "default": false
+                  },
+                  "allocationMode": {
+                    "type": "string",
+                    "enum": [
+                      "Dynamic",
+                      "Explicit"
+                    ]
+                  },
+                  "provisionEmpty": {
+                    "type": "boolean"
+                  },
+                  "maxWorkers": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 512
+                  }
+                },
+                "required": [
+                  "compartmentId",
+                  "subnetId",
+                  "occupancy",
+                  "maxShards",
+                  "portStart",
+                  "preserveSource"
+                ],
+                "x-kubernetes-validations": [
+                  {
+                    "rule": "self.compartmentId == oldSelf.compartmentId",
+                    "message": "compartmentId is immutable; create a new resource for migration"
+                  },
+                  {
+                    "rule": "self.subnetId == oldSelf.subnetId",
+                    "message": "subnetId is immutable; create a new resource for migration"
+                  },
+                  {
+                    "rule": "self.occupancy == oldSelf.occupancy",
+                    "message": "occupancy is immutable; create a new resource for migration"
+                  },
+                  {
+                    "rule": "self.maxShards == oldSelf.maxShards",
+                    "message": "maxShards is immutable; create a new resource for migration"
+                  },
+                  {
+                    "rule": "self.portStart == oldSelf.portStart",
+                    "message": "portStart is immutable; create a new resource for migration"
+                  },
+                  {
+                    "rule": "self.preserveSource == oldSelf.preserveSource",
+                    "message": "preserveSource is immutable; create a new resource for migration"
+                  },
+                  {
+                    "rule": "has(self.allocationMode) == has(oldSelf.allocationMode) && (!has(self.allocationMode) || self.allocationMode == oldSelf.allocationMode)",
+                    "message": "allocationMode is immutable; create a new resource for migration"
+                  },
+                  {
+                    "rule": "has(self.provisionEmpty) == has(oldSelf.provisionEmpty) && (!has(self.provisionEmpty) || self.provisionEmpty == oldSelf.provisionEmpty)",
+                    "message": "provisionEmpty is immutable; create a new resource for migration"
+                  },
+                  {
+                    "rule": "has(self.maxWorkers) == has(oldSelf.maxWorkers) && (!has(self.maxWorkers) || self.maxWorkers == oldSelf.maxWorkers)",
+                    "message": "maxWorkers is immutable; create a new resource for migration"
+                  },
+                  {
+                    "rule": "has(self.allocationMode) && self.allocationMode == 'Explicit' ? self.maxShards == 1 && self.portStart == 1 : self.portStart >= 1024 && self.portStart + self.occupancy - 1 <= 65535",
+                    "message": "Explicit pools require maxShards=1 and portStart=1; Dynamic port range must fit 1024..65535"
+                  },
+                  {
+                    "rule": "self.occupancy * (has(self.maxWorkers) ? self.maxWorkers : 20) <= 1024",
+                    "message": "occupancy times maxWorkers (default 20, including surge) must fit 1024 backends"
+                  }
+                ]
+              },
+              "status": {
+                "type": "object",
+                "x-kubernetes-preserve-unknown-fields": true
+              }
+            },
+            "required": [
+              "spec"
+            ]
+          }
+        },
+        "subresources": {
+          "status": {}
+        },
+        "additionalPrinterColumns": [
+          {
+            "name": "Per-NLB",
+            "type": "integer",
+            "jsonPath": ".spec.occupancy"
+          },
+          {
+            "name": "Max-NLBs",
+            "type": "integer",
+            "jsonPath": ".spec.maxShards"
+          },
+          {
+            "name": "Used-Slots",
+            "type": "integer",
+            "jsonPath": ".status.used"
+          },
+          {
+            "name": "Free-Slots",
+            "type": "integer",
+            "jsonPath": ".status.available"
+          },
+          {
+            "name": "Age",
+            "type": "date",
+            "jsonPath": ".metadata.creationTimestamp"
+          }
+        ]
+      }
+    ]
+  }
+}

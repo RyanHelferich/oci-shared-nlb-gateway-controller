@@ -1,0 +1,9 @@
+The controller is installed in {{ .Release.Namespace }}.
+
+1. Confirm both replicas and the elected leader:
+   kubectl -n {{ .Release.Namespace }} rollout status deployment/{{ include "oci-shared-nlb-controller.fullname" . }}
+
+2. Create a GatewayPool if gatewayPool.create was left false.
+
+3. Start with examples/nodeport-local.yaml and verify Gateway/UDPRoute conditions
+   before publishing the assigned public IP and listener port.

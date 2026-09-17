@@ -1,0 +1,107 @@
+{{- $repository := required "image.repository is required" .Values.image.repository -}}
+{{- $digest := required "image.digest is required and must be an immutable sha256 digest" .Values.image.digest -}}
+{{- $compartment := required "oci.compartmentId is required" .Values.oci.compartmentId -}}
+{{- $subnet := required "oci.subnetId is required" .Values.oci.subnetId -}}
+{{- $installation := required "installationId is required and must remain stable" .Values.installationId -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "oci-shared-nlb-controller.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "oci-shared-nlb-controller.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "oci-shared-nlb-controller.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "oci-shared-nlb-controller.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "oci-shared-nlb-controller.serviceAccountName" . }}
+      automountServiceAccountToken: true
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "1"
+          - name: use-vc
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: controller
+          image: {{ printf "%s@%s" $repository $digest | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: OCI_RESOURCE_PRINCIPAL_VERSION
+              value: "2.2"
+            - name: OCI_RESOURCE_PRINCIPAL_REGION
+              value: {{ .Values.oci.region | quote }}
+          args:
+            - {{ printf "--namespace=%s" .Release.Namespace | quote }}
+            - {{ printf "--region=%s" .Values.oci.region | quote }}
+            - {{ printf "--compartment=%s" $compartment | quote }}
+            - {{ printf "--subnet=%s" $subnet | quote }}
+            - {{ printf "--installation-id=%s" $installation | quote }}
+            - {{ printf "--auth=%s" .Values.oci.authentication | quote }}
+            {{- if .Values.gatewayAPI.enabled }}
+            - --enable-gateway-api
+            - {{ printf "--gateway-class=%s" .Values.gatewayAPI.className | quote }}
+            {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          ports:
+            - name: metrics
+              containerPort: 8080
+            - name: health
+              containerPort: 8081
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.affinity }}
+      affinity:
+        {{- toYaml .Values.affinity | nindent 8 }}
+      {{- else }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    {{- include "oci-shared-nlb-controller.selectorLabels" . | nindent 20 }}
+                topologyKey: kubernetes.io/hostname
+      {{- end }}

@@ -26,7 +26,7 @@ type GatewayAllocation struct {
 	Port         int32  `json:"port"`
 	Tombstone    bool   `json:"tombstone,omitempty"`
 	Attached     bool   `json:"attached,omitempty"`
-	Mode         string `json:"mode,omitempty"` // Empty in old leases means PodIP.
+	Mode         string `json:"mode,omitempty"` // PodIP, NodePortCluster, or public NodePortLocal; empty in old leases means PodIP.
 }
 
 type GatewayPoolStatus struct {

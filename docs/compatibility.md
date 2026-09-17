@@ -11,14 +11,14 @@
 
 ## Backend modes
 
-| Property | `NodePortCluster` | `PodIP` |
-| --- | --- | --- |
-| Intended network | Overlay or native | Routable native pod addressing |
-| Service type | `NodePort` | `ClusterIP` |
-| NLB backends | Worker VNIC IP and allocated UDP NodePort | Selected pod IP and UDP target port |
-| Health | Worker HTTP `:10256/healthz` | TCP target on the same pod |
-| Pod movement | Kubernetes/CNI updates forwarding | OCI backend address must change |
-| Source IP | Depends on CNI forwarding mode; not assumed | Source preservation is disabled in this release |
+| Property | `NodePortLocal` | `NodePortCluster` | `PodIP` |
+| --- | --- | --- | --- |
+| Intended network | Preferred worker path for overlay or native | All-worker compatibility path | Routable native pod addressing |
+| Service type / policy | `NodePort` / `Local` | `NodePort` / `Cluster` | `ClusterIP` |
+| NLB backends | Worker hosting the one ready pod | Every admitted worker | Selected pod IP and UDP target port |
+| Health | TCP health NodePort forwarded to the workload | Worker HTTP `:10256/healthz` | TCP target on the same pod |
+| Pod movement | Controller moves the single worker backend | Kubernetes/CNI updates cross-node forwarding | Controller changes pod-IP backend |
+| Source IP | Depends on CNI behavior; validate | Depends on CNI forwarding; not assumed | Disabled in this release |
 
 ## Deliberately bounded Gateway API subset
 
@@ -33,6 +33,7 @@
 
 - A Service must use a selector and controller-owned EndpointSlices.
 - PodIP mode requires exactly one eligible ready endpoint.
+- NodePortLocal requires exactly one eligible ready endpoint, `externalTrafficPolicy: Local`, one UDP NodePort, and one TCP health NodePort.
 - A multi-port Service uses one selector for every port. It works when the selected pod set owns all declared ports; it cannot choose a different pod set for each port.
 - NodePortCluster requires `externalTrafficPolicy: Cluster` and one allocated UDP NodePort per route.
 - `hostNetwork` pods are rejected for PodIP mode.
@@ -48,4 +49,4 @@ Validate these independent limits before rollout:
 4. NLB, public IPv4, VNIC, connection-tracking, pod, and worker quotas.
 5. Expected packet rate, bandwidth, health-check traffic, and update rate.
 
-The project's 45-listener default is an operational recommendation below OCI's 50-listener maximum. It is not a performance result.
+The CRD's 45-listener default is configuration headroom below OCI's 50-listener maximum. The optional Helm pilot defaults to 8. Neither setting is a performance result. See [capacity planning](capacity-planning.md).

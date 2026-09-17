@@ -13,6 +13,8 @@ UDPRoute tenant-b -> Service port 51821 -> NLB listener 20001
 
 Use [the example](../examples/multi-port-service.yaml) when the selected workload pod set owns every declared port.
 
+The current example uses `NodePortLocal`. Kubernetes allocates one UDP NodePort per named tunnel port plus one TCP health NodePort. Every route registers the same selected pod worker but keeps its own NLB listener and backend set.
+
 ## Important selector rule
 
 A Kubernetes Service has one selector for all of its ports. It does not select pod set A for port A and pod set B for port B. Therefore:

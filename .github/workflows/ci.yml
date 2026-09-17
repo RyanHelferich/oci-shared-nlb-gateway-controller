@@ -25,6 +25,24 @@ jobs:
         run: go vet ./...
       - name: Package and installer tests
         run: python tests/package/test_tools.py
+      - name: Helm chart lint and render
+        shell: bash
+        run: |
+          curl -fsSLO https://get.helm.sh/helm-v4.3.0-linux-amd64.tar.gz
+          curl -fsSLO https://get.helm.sh/helm-v4.3.0-linux-amd64.tar.gz.sha256sum
+          sha256sum --check helm-v4.3.0-linux-amd64.tar.gz.sha256sum
+          tar -xzf helm-v4.3.0-linux-amd64.tar.gz
+          values=(
+            --set-string image.repository=example.invalid/controller
+            --set-string image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+            --set-string oci.compartmentId=ocid1.compartment.test
+            --set-string oci.subnetId=ocid1.subnet.test
+            --set-string installationId=ci
+            --set gatewayPool.create=true
+          )
+          ./linux-amd64/helm lint charts/oci-shared-nlb-controller "${values[@]}"
+          ./linux-amd64/helm template shared-nlb charts/oci-shared-nlb-controller \
+            --namespace test --include-crds "${values[@]}" >/tmp/controller-chart.yaml
       - name: Dependency notices
         run: python scripts/collect-notices.py --check
       - name: Public-tree disclosure and link audit

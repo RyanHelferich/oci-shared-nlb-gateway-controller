@@ -1,0 +1,12 @@
+apiVersion: v2
+name: oci-shared-nlb-controller
+description: Share OCI Network Load Balancers across Gateway API UDP routes on OKE
+type: application
+version: 0.2.0
+appVersion: "0.2.0-dev"
+kubeVersion: ">=1.30.0-0"
+home: https://github.com/RyanHelferich/oci-shared-nlb-gateway-controller
+sources:
+  - https://github.com/RyanHelferich/oci-shared-nlb-gateway-controller
+annotations:
+  artifacthub.io/license: Apache-2.0

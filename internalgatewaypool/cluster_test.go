@@ -43,3 +43,22 @@ func TestClusterFleetModeBudgetAndLease(t *testing.T) {
 		t.Fatal("legacy lease mode changed")
 	}
 }
+
+func TestLocalFleetLeaseStoresStableServiceHealthPort(t *testing.T) {
+	f := newFixture(t, 0)
+	svc, route := serviceAndRoute("local")
+	route.Annotations = map[string]string{PoolAnnotation: "pool", ModeAnnotation: "NodePortLocal", HealthAnnotation: "9901"}
+	svc.Spec.Type = core.ServiceTypeNodePort
+	svc.Spec.ExternalTrafficPolicy = core.ServiceExternalTrafficPolicyLocal
+	svc.Spec.Ports[0].NodePort = 30001
+	svc.Spec.Ports[1].NodePort = 30901
+	f.r.Reader = fake.NewClientBuilder().WithScheme(f.c.Scheme()).WithObjects(svc).Build()
+	_, port, health, err := f.r.routeService(context.Background(), route)
+	if err != nil || port != 51820 || health != 9901 {
+		t.Fatalf("port=%d health=%d err=%v", port, health, err)
+	}
+	allocation, err := reserve(f.p, route, svc, port, health)
+	if err != nil || allocation.Mode != "NodePortLocal" || allocation.HealthPort != 9901 {
+		t.Fatalf("lease=%+v err=%v", allocation, err)
+	}
+}

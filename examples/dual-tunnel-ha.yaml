@@ -1,0 +1,84 @@
+# Two independent public paths for one logical customer tunnel. The application
+# owns the two tunnel pods, keys, peer coordination, and endpoint failover.
+# Use pod anti-affinity/topology spread so path A and path B do not share a node.
+apiVersion: nlb.independent.dev/v1alpha1
+kind: GatewayPool
+metadata:
+  name: tunnel-ha-a
+  namespace: YOUR_TUNNEL_NAMESPACE
+spec:
+  gatewayClassName: oci-native-udp
+  occupancy: 8
+  maxGateways: 10
+  portStart: 20000
+  maxWorkers: 20
+---
+apiVersion: nlb.independent.dev/v1alpha1
+kind: GatewayPool
+metadata:
+  name: tunnel-ha-b
+  namespace: YOUR_TUNNEL_NAMESPACE
+spec:
+  gatewayClassName: oci-native-udp
+  occupancy: 8
+  maxGateways: 10
+  portStart: 21000
+  maxWorkers: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: customer-example-a
+  namespace: YOUR_TUNNEL_NAMESPACE
+spec:
+  type: NodePort
+  externalTrafficPolicy: Local
+  selector:
+    tunnel.customer: example
+    tunnel.path: a
+  ports:
+    - {name: wireguard, protocol: UDP, port: 51820, targetPort: 51820}
+    - {name: health, protocol: TCP, port: 9901, targetPort: 9901}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: customer-example-b
+  namespace: YOUR_TUNNEL_NAMESPACE
+spec:
+  type: NodePort
+  externalTrafficPolicy: Local
+  selector:
+    tunnel.customer: example
+    tunnel.path: b
+  ports:
+    - {name: wireguard, protocol: UDP, port: 51820, targetPort: 51820}
+    - {name: health, protocol: TCP, port: 9901, targetPort: 9901}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: UDPRoute
+metadata:
+  name: customer-example-a
+  namespace: YOUR_TUNNEL_NAMESPACE
+  annotations:
+    nlb.independent.dev/pool: tunnel-ha-a
+    nlb.independent.dev/backend-mode: NodePortLocal
+    nlb.independent.dev/health-port: "9901"
+spec:
+  rules:
+    - backendRefs:
+        - {name: customer-example-a, port: 51820}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: UDPRoute
+metadata:
+  name: customer-example-b
+  namespace: YOUR_TUNNEL_NAMESPACE
+  annotations:
+    nlb.independent.dev/pool: tunnel-ha-b
+    nlb.independent.dev/backend-mode: NodePortLocal
+    nlb.independent.dev/health-port: "9901"
+spec:
+  rules:
+    - backendRefs:
+        - {name: customer-example-b, port: 51820}

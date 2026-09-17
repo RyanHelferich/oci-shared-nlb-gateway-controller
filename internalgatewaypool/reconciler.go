@@ -103,7 +103,7 @@ func gatewayName(uid types.UID, shard int) string {
 }
 
 func reserve(p *api.GatewayPool, route *gw.UDPRoute, svc *core.Service, port, health int32) (api.GatewayAllocation, error) {
-	if mode := routeMode(route); mode != "PodIP" && mode != "NodePortCluster" {
+	if mode := routeMode(route); mode != "PodIP" && mode != "NodePortCluster" && mode != "NodePortLocal" {
 		return api.GatewayAllocation{}, fmt.Errorf("unsupported backend-mode")
 	}
 	if err := Validate(p.Spec); err != nil {
@@ -154,7 +154,7 @@ func (r *Reconciler) routeService(ctx context.Context, route *gw.UDPRoute) (*cor
 	}
 	health, err := strconv.ParseInt(route.Annotations[HealthAnnotation], 10, 32)
 	mode := routeMode(route)
-	if mode != "PodIP" && mode != "NodePortCluster" {
+	if mode != "PodIP" && mode != "NodePortCluster" && mode != "NodePortLocal" {
 		return nil, 0, 0, invalid("unsupported backend-mode")
 	}
 	if mode == "NodePortCluster" {
@@ -173,31 +173,44 @@ func (r *Reconciler) routeService(ctx context.Context, route *gw.UDPRoute) (*cor
 	serviceTypeOK := svc.Spec.Type == core.ServiceTypeClusterIP
 	if mode == "NodePortCluster" {
 		serviceTypeOK = svc.Spec.Type == core.ServiceTypeNodePort && svc.Spec.ExternalTrafficPolicy == core.ServiceExternalTrafficPolicyCluster
+	} else if mode == "NodePortLocal" {
+		serviceTypeOK = svc.Spec.Type == core.ServiceTypeNodePort && svc.Spec.ExternalTrafficPolicy == core.ServiceExternalTrafficPolicyLocal
 	}
 	if !svc.DeletionTimestamp.IsZero() || !serviceTypeOK || svc.Spec.PublishNotReadyAddresses || len(svc.Spec.Selector) == 0 {
-		return nil, 0, 0, invalid("live selector ClusterIP Service without publishNotReadyAddresses required")
+		return nil, 0, 0, invalid("live selector Service with the mode's traffic policy and without publishNotReadyAddresses required")
 	}
 	healthExposed := false
+	healthMatches := 0
 	for _, p := range svc.Spec.Ports {
 		if p.Protocol != core.ProtocolTCP {
 			continue
 		}
-		// A named target needs the adapter's Pod/EndpointSlice validation. Numeric
-		// targets can be rejected here without consuming a permanent lease.
-		target := p.TargetPort.IntVal
-		if target == 0 {
-			target = p.Port
-		}
-		if p.TargetPort.Type == 1 || target == int32(health) {
-			healthExposed = true
+		if mode == "NodePortLocal" {
+			if p.Port == int32(health) && p.NodePort >= 1 && p.NodePort <= 65535 {
+				healthExposed = true
+				healthMatches++
+			}
+		} else {
+			// A named target needs the adapter's Pod/EndpointSlice validation. Numeric
+			// targets can be rejected here without consuming a permanent lease.
+			target := p.TargetPort.IntVal
+			if target == 0 {
+				target = p.Port
+			}
+			if p.TargetPort.Type == 1 || target == int32(health) {
+				healthExposed = true
+			}
 		}
 	}
 	if !healthExposed && mode != "NodePortCluster" {
 		return nil, 0, 0, invalid("health port must be exposed by a TCP Service target")
 	}
+	if mode == "NodePortLocal" && healthMatches != 1 {
+		return nil, 0, 0, invalid("NodePortLocal requires exactly one allocated TCP health Service port")
+	}
 	for _, p := range svc.Spec.Ports {
 		if p.Port == int32(*b.Port) && p.Protocol == core.ProtocolUDP && p.Name != "" {
-			if mode == "NodePortCluster" && (p.NodePort < 1 || p.NodePort > 65535) {
+			if (mode == "NodePortCluster" || mode == "NodePortLocal") && (p.NodePort < 1 || p.NodePort > 65535) {
 				return nil, 0, 0, invalid("UDP NodePort must be allocated")
 			}
 			return svc, p.Port, int32(health), nil

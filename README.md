@@ -19,14 +19,15 @@ Each route keeps its own listener, backend set, health state, and public port. T
 
 ## Data-plane architectures
 
-Choose the backend mode from the cluster's real network path. `PodIP` requires independently proven routing from the NLB subnet to pod addresses. `NodePortCluster` works through stable worker VNIC addresses and is the expected mode for overlay networking.
+Choose the backend mode from the cluster's real network path. `NodePortLocal` is the preferred pilot mode: it registers only the worker hosting the one ready pod and checks the workload through a TCP health NodePort. `PodIP` remains available when NLB-to-pod routing is independently proven. `NodePortCluster` is the all-worker compatibility path.
 
 | OKE networking | Controller mode | OCI NLB backend | Kubernetes forwarding |
 | --- | --- | --- | --- |
+| VCN-native or Cilium overlay | `NodePortLocal` | Ready pod's worker IP and UDP NodePort | Local service forwarding reaches the pod; workload TCP health gates the path |
 | VCN-native with proven NLB-to-pod routing | `PodIP` | Ready pod IP and UDP target port | NLB reaches the pod directly |
-| Cilium or another overlay | `NodePortCluster` | Worker private IP and Service NodePort | Cilium or kube-proxy forwards to the selected pod |
+| Compatibility path | `NodePortCluster` | Every admitted worker IP and UDP NodePort | Service forwarding may cross nodes; worker health is not workload health |
 
-VCN-native clusters may also use `NodePortCluster` when the operator prefers the worker-backed path. Do not select `PodIP` merely because the cluster is described as VCN-native; prove the route from the NLB subnet first.
+Do not select `PodIP` merely because the cluster is described as VCN-native; prove the route from the NLB subnet first.
 
 ### VCN-native OKE: direct PodIP mode
 
@@ -65,9 +66,9 @@ flowchart TB
 
 See the measured [VCN-native OKE validation](Test/01-VCN-Native-OKE-Validation.md).
 
-### Cilium or overlay OKE: NodePortCluster mode
+### Cilium or worker-backed OKE: NodePortLocal mode
 
-The controller registers eligible worker VNIC addresses and the Service's allocated UDP NodePort. Cilium performs the final Service lookup and local or cross-node overlay delivery.
+The controller registers the worker hosting the one ready pod and the Service's allocated UDP NodePort. With `externalTrafficPolicy: Local`, Cilium performs the final Service lookup and delivers to the local pod.
 
 ```mermaid
 flowchart TB
@@ -81,8 +82,8 @@ flowchart TB
 
       subgraph oke["Cilium overlay OKE cluster"]
         direction TB
-        worker["3 · OKE worker VNIC<br/>worker IP:allocated NodePort"]:::worker
-        cilium["4 · Cilium service forwarding<br/>local or cross-node overlay"]:::network
+        worker["3 · Pod's OKE worker VNIC<br/>one worker IP:allocated NodePort"]:::worker
+        cilium["4 · Cilium local service forwarding<br/>ETP Local"]:::network
         pod["5 · UDP workload pod<br/>overlay pod IP:target port"]:::workload
       end
     end
@@ -104,14 +105,14 @@ flowchart TB
   linkStyle 0,1,2,3 stroke:#2563eb,stroke-width:4px;
 ```
 
-**Packet path:** public listener → worker NodePort → Cilium → overlay pod. The controller programs the NLB and worker backend membership but never receives the UDP packets. Its shared control flow is shown in [Controller architecture and reconciliation](#controller-architecture-and-reconciliation).
+**Packet path:** public listener → selected pod's worker NodePort → Cilium → local pod. A separate TCP NodePort reaches the pod health endpoint. The controller programs the NLB and worker backend membership but never receives the UDP packets. Its shared control flow is shown in [Controller architecture and reconciliation](#controller-architecture-and-reconciliation).
 
 See the measured [Cilium overlay OKE validation](Test/02-Cilium-Overlay-OKE-Validation.md).
 
 > [!WARNING]
-> The isolated Cilium 1.20.2 canary reproduced Oracle's published OKE issue in which deletion of a duplicate EndpointSlice can remove a still-valid Service backend. Worker `/healthz` remained a separate node-level signal and did not prove that backend existed. Treat [the recorded result](Test/02-Cilium-Overlay-OKE-Validation.md#endpointslice-backend-loss-failure) and Oracle's monitor/restart workaround as a production acceptance gate for the exact OKE and Cilium versions you operate.
+> The earlier `NodePortCluster` Cilium 1.20.2 canary reproduced an EndpointSlice backend-loss failure while worker `/healthz` remained green. A later `NodePortLocal` canary passed workload TCP health failure/recovery and authenticated traffic, but the duplicate-EndpointSlice churn trigger was not repeated in Local mode. Keep that case in production acceptance. See [the recorded result](Test/02-Cilium-Overlay-OKE-Validation.md#endpointslice-backend-loss-failure).
 
-The controller uses 45 active listener slots per NLB by default. OCI's service limit is 50; the five unused slots provide operational headroom. The value is configurable up to 50.
+The CRD default allows 45 active listener slots per NLB. OCI's service limit is 50, so this preserves five configuration slots. The optional Helm pilot starts at 8 routes per NLB until capacity is validated. Neither value is a throughput claim: NLBs are elastic and documented as capable of exceeding 8 Gbps, but OCI publishes no 45 Gbps guarantee. Size pool occupancy with the [capacity plan](docs/capacity-planning.md).
 
 ## Controller architecture and reconciliation
 
@@ -182,6 +183,7 @@ How reconciliation works:
 | `internalgateway/` | Gateway API and UDPRoute adapter |
 | `internalgatewaypool/` | Shared NLB and listener allocator |
 | `deploy/` | CRDs and canonical manifests |
+| `charts/` | Optional Helm pilot installation; existing install methods remain supported |
 | `examples/` | Copy-and-adapt usage examples |
 | `scripts/` | Installation, packaging, notices, and safe cleanup tools |
 | `docs/` | Architecture, installation, validation, and operations |
@@ -194,8 +196,9 @@ How reconciliation works:
 2. Check [compatibility and limitations](docs/compatibility.md).
 3. For overlay networking, complete the [Cilium validation checklist](Test/02-Cilium-Overlay-OKE-Validation.md#minimum-production-acceptance-sequence).
 4. Follow [installation](docs/install.md) for a small canary.
-5. Use [operations](docs/operations.md) for rollout, recovery, and retirement.
-6. Review the [VCN-native](Test/01-VCN-Native-OKE-Validation.md) or [Cilium overlay](Test/02-Cilium-Overlay-OKE-Validation.md) validation report and repeat its acceptance suite in your environment.
+5. Set NLB occupancy from [capacity planning](docs/capacity-planning.md).
+6. Review [dual-tunnel HA](docs/dual-tunnel-ha.md) and use [operations](docs/operations.md) for rollout, recovery, and retirement.
+7. Review the [VCN-native](Test/01-VCN-Native-OKE-Validation.md) or [Cilium overlay](Test/02-Cilium-Overlay-OKE-Validation.md) validation report and repeat its acceptance suite in your environment.
 
 ## Build and test
 
@@ -212,7 +215,7 @@ The Dockerfile produces a static Linux/amd64 image and runs it as an unprivilege
 
 ## Status
 
-Version `0.1.0` is an evaluation release. The reconciliation engine, automatic Gateway allocation, PodIP mode, and NodePortCluster mode have bounded OCI lab evidence. Cilium cross-node overlay forwarding passed its measured canary, while the EndpointSlice churn gate failed as described above. A cluster's exact CNI build, service-proxy behavior, worker health endpoint, security rules, quotas, workload behavior, and recovery objective require local acceptance testing.
+Version `0.1.0` is an evaluation release. The reconciliation engine, automatic Gateway allocation, PodIP mode, NodePortCluster mode, and NodePortLocal mode have bounded OCI lab evidence. NodePortLocal passed one-worker selection, workload TCP health failure/recovery, authenticated traffic, and cross-worker pod moves on both Cilium overlay and VCN-native OKE. The optional Helm chart passed lint, local render, and an OKE API server-side dry run; live release adoption remains untested. Dual-tunnel HA and high-throughput sizing remain design and acceptance work. A cluster's exact CNI build, service-proxy behavior, workload health, security rules, quotas, throughput, and recovery objective require local acceptance testing.
 
 See [SUPPORT.md](SUPPORT.md) and [CONTRIBUTING.md](CONTRIBUTING.md) before operating or contributing.
 

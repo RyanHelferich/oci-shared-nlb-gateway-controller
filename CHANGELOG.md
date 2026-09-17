@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Added `NodePortLocal` Gateway API mode with `externalTrafficPolicy: Local`, one verified pod worker backend, and workload TCP health through an allocated NodePort.
+- Added an optional Helm chart while retaining the renderer and canonical manifests.
+- Added dual-tunnel HA objects and design guidance.
+- Added NLB throughput planning that distinguishes elastic Network Load Balancer behavior from 8 Gbps Load Balancer shapes.
+
 ## 0.1.0 - evaluation
 
 - Added a bounded Gateway API implementation for shared OCI UDP NLBs.

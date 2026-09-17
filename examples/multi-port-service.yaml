@@ -1,12 +1,13 @@
 # Supported shape: one selected tunnel workload owns several UDP ports.
-# Replace placeholders and start with one canary. This example uses default PodIP mode.
+# Replace placeholders and start with one canary. This example uses NodePortLocal.
 apiVersion: v1
 kind: Service
 metadata:
   name: tunnels-multiport
   namespace: YOUR_TUNNEL_NAMESPACE
 spec:
-  type: ClusterIP
+  type: NodePort
+  externalTrafficPolicy: Local
   selector:
     app: YOUR_SINGLE_ACTIVE_MULTIPORT_TUNNEL_LABEL
   ports:
@@ -36,6 +37,7 @@ metadata:
   namespace: YOUR_TUNNEL_NAMESPACE
   annotations:
     nlb.independent.dev/pool: shared
+    nlb.independent.dev/backend-mode: NodePortLocal
     nlb.independent.dev/health-port: "9901"
 spec:
   rules:
@@ -50,6 +52,7 @@ metadata:
   namespace: YOUR_TUNNEL_NAMESPACE
   annotations:
     nlb.independent.dev/pool: shared
+    nlb.independent.dev/backend-mode: NodePortLocal
     nlb.independent.dev/health-port: "9901"
 spec:
   rules:
@@ -64,6 +67,7 @@ metadata:
   namespace: YOUR_TUNNEL_NAMESPACE
   annotations:
     nlb.independent.dev/pool: shared
+    nlb.independent.dev/backend-mode: NodePortLocal
     nlb.independent.dev/health-port: "9901"
 spec:
   rules:

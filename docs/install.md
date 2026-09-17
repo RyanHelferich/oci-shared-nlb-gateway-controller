@@ -7,7 +7,8 @@ Start with one non-production route and keep its previous endpoint available for
 - Choose a trusted workload namespace and a unique, stable installation ID.
 - Create or select the public NLB subnet and confirm quota.
 - Apply the reviewed [workload identity IAM policy](iam.md).
-- Permit NLB-subnet UDP traffic to the planned NodePort range and TCP 10256 to workers for NodePortCluster.
+- For `NodePortLocal`, permit NLB-subnet traffic to the allocated UDP NodePort and TCP health NodePort on the selected pod's worker.
+- For `NodePortCluster`, permit UDP NodePorts and TCP 10256 to every admitted worker.
 - For PodIP only, permit NLB-to-pod UDP and workload TCP health and prove direct pod address routing.
 - Push the controller image into the approved registry and record its immutable manifest digest.
 - For Cilium, finish the [overlay preflight](../Test/02-Cilium-Overlay-OKE-Validation.md#required-configuration).
@@ -56,13 +57,30 @@ kubectl --context YOUR_CONTEXT -n YOUR_TRUSTED_NAMESPACE \
 
 The renderer creates a namespace, ServiceAccount, namespaced Role, exact-name GatewayClass status permission, worker-node read permission, and a two-replica Deployment. It does not create IAM policies, networks, registry credentials, or application workloads. Add `--pull-secret` only for an existing Secret name; the controller itself receives no Secret-read permission.
 
+### Optional Helm pilot
+
+Helm is an additional interface for a quick pilot; it does not replace the renderer or canonical manifests. After installing the Gateway API CRDs above:
+
+```sh
+helm upgrade --install shared-nlb charts/oci-shared-nlb-controller \
+  --namespace YOUR_TRUSTED_NAMESPACE --create-namespace \
+  --set-string image.repository=YOUR_REGISTRY/controller \
+  --set-string image.digest=sha256:YOUR_MANIFEST_DIGEST \
+  --set-string oci.region=YOUR_OCI_REGION \
+  --set-string oci.compartmentId=YOUR_COMPARTMENT_OCID \
+  --set-string oci.subnetId=YOUR_NLB_SUBNET_OCID \
+  --set-string installationId=YOUR_STABLE_INSTALLATION_ID
+```
+
+See the [chart README](../charts/oci-shared-nlb-controller/README.md). Keep the namespace, ServiceAccount identity, installation ID, and GatewayClass stable across upgrades.
+
 ## 4. Apply a canary
 
-For an overlay cluster, copy [examples/overlay-nodeport.yaml](../examples/overlay-nodeport.yaml). Set the existing namespace, workload selector, and UDP port. The example creates:
+For an overlay cluster or a worker-backed VCN-native cluster, copy [examples/nodeport-local.yaml](../examples/nodeport-local.yaml). Set the existing namespace, workload selector, and UDP/health ports. The example creates:
 
-- a small `GatewayPool` using 2 slots per NLB;
-- a NodePort Service with `externalTrafficPolicy: Cluster`; and
-- one automatically allocated `UDPRoute` in `NodePortCluster` mode.
+- a small `GatewayPool` using 8 slots per NLB;
+- a NodePort Service with `externalTrafficPolicy: Local` and workload TCP health; and
+- one automatically allocated `UDPRoute` in `NodePortLocal` mode.
 
 ```sh
 kubectl --context YOUR_CONTEXT apply --server-side --dry-run=server -f canary.yaml
@@ -71,7 +89,7 @@ kubectl --context YOUR_CONTEXT -n YOUR_TRUSTED_NAMESPACE \
   get gatewaypools,gateways,udproutes,services
 ```
 
-For directly routable pod networks, [examples/vcn-native-podip.yaml](../examples/vcn-native-podip.yaml) demonstrates PodIP mode and its same-pod TCP health port.
+For directly routable pod networks, [examples/vcn-native-podip.yaml](../examples/vcn-native-podip.yaml) demonstrates PodIP mode. [NodePortCluster](../examples/overlay-nodeport.yaml) remains available as an all-worker compatibility canary.
 
 ## 5. Publish the endpoint correctly
 

@@ -17,52 +17,104 @@ many UDPRoute objects -> many UDP listeners -> a smaller pool of shared OCI NLBs
 
 Each route keeps its own listener, backend set, health state, and public port. The controller is only in the control path; encrypted UDP traffic flows through OCI and Kubernetes networking without passing through the controller pod.
 
-## Recommended path for overlay clusters
+## Data-plane architectures
 
-Use `NodePortCluster` mode when pod addresses come from an overlay network such as Cilium:
+Choose the backend mode from the cluster's real network path. `PodIP` requires independently proven routing from the NLB subnet to pod addresses. `NodePortCluster` works through stable worker VNIC addresses and is the expected mode for overlay networking.
 
-```text
-Internet peer
-  -> shared OCI NLB public-IP:allocated-UDP-port
-  -> OKE worker VNIC:Service-NodePort
-  -> Cilium or kube-proxy service forwarding
-  -> selected UDP workload pod
-```
+| OKE networking | Controller mode | OCI NLB backend | Kubernetes forwarding |
+| --- | --- | --- | --- |
+| VCN-native with proven NLB-to-pod routing | `PodIP` | Ready pod IP and UDP target port | NLB reaches the pod directly |
+| Cilium or another overlay | `NodePortCluster` | Worker private IP and Service NodePort | Cilium or kube-proxy forwards to the selected pod |
 
-The controller registers eligible worker VNIC addresses as NLB backends. It does not assume that OCI can route directly to overlay pod IPs. Cilium kube-proxy replacement can be used when UDP NodePort handling and the worker health endpoint are configured and tested. See [Cilium overlay validation](Test/02-Cilium-Overlay-OKE-Validation.md).
+VCN-native clusters may also use `NodePortCluster` when the operator prefers the worker-backed path. Do not select `PodIP` merely because the cluster is described as VCN-native; prove the route from the NLB subnet first.
 
-> [!WARNING]
-> The isolated Cilium 1.20.2 canary reproduced Oracle's published OKE issue in which deletion of a duplicate EndpointSlice can remove a still-valid Service backend. Worker `/healthz` remained a separate node-level signal and did not prove that backend existed. Treat [the recorded result](Test/02-Cilium-Overlay-OKE-Validation.md#endpointslice-backend-loss-failure) and Oracle's monitor/restart workaround as a production acceptance gate for the exact OKE and Cilium versions you operate.
+### VCN-native OKE: direct PodIP mode
 
-`PodIP` mode is available for clusters where OCI can route from the NLB subnet directly to pod addresses. It should not be selected for an overlay network without a separately proven route.
-
-## Architecture at a glance
+The Service and EndpointSlice identify the ready workload. The controller programs that VCN-native pod address directly into the NLB backend set. UDP packets never traverse the controller.
 
 ```mermaid
 flowchart LR
   peer[Internet UDP peer]:::external
-  nlb[OCI shared NLB<br/>one listener and backend set per route]:::oci
-  worker[OKE worker VNIC<br/>UDP NodePort]:::oke
-  dataplane[Cilium or kube-proxy<br/>Service forwarding]:::network
-  pod[UDP workload pod]:::workload
-  api[Kubernetes API<br/>Gateway, UDPRoute, Service]:::k8s
-  ctl[Shared NLB controller<br/>two replicas, one active leader]:::controller
-  ociapi[OCI NLB API]:::oci
 
-  peer -->|encrypted UDP| nlb -->|UDP NodePort| worker --> dataplane --> pod
-  api -. desired state .-> ctl
-  ctl -. reconcile .-> ociapi
-  ociapi -. listener/backend state .-> nlb
+  subgraph vcn[OCI VCN]
+    nlb[OCI shared NLB<br/>public IP + allocated UDP listener]:::oci
 
-  classDef external fill:#fef3c7,stroke:#d97706,color:#451a03,stroke-width:2px;
-  classDef oci fill:#ede9fe,stroke:#7c3aed,color:#2e1065,stroke-width:2px;
-  classDef oke fill:#e0f2fe,stroke:#0284c7,color:#0c4a6e,stroke-width:2px;
-  classDef network fill:#cffafe,stroke:#0891b2,color:#164e63,stroke-width:2px;
-  classDef workload fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px;
+    subgraph oke[VCN-native OKE cluster]
+      api[Kubernetes API<br/>GatewayPool, Gateway, UDPRoute,<br/>Service, EndpointSlice]:::k8s
+      ctl[Shared NLB controller<br/>two replicas, one active leader]:::controller
+      svc[ClusterIP Service<br/>selected ready endpoint]:::service
+      pod[UDP workload pod<br/>VCN-native routable pod IP]:::workload
+      svc -. selects .-> pod
+      api -. desired state .-> ctl
+    end
+  end
+
+  ociapi[OCI NLB API]:::ociapi
+
+  peer ==>|public IP:listener port| nlb
+  nlb ==>|UDP directly to pod IP:target port| pod
+  ctl -. listener, backend set, health .-> ociapi
+  ociapi -. programs .-> nlb
+
+  classDef external fill:#fff7ed,stroke:#ea580c,color:#7c2d12,stroke-width:2px;
+  classDef oci fill:#f3e8ff,stroke:#7e22ce,color:#3b0764,stroke-width:2px;
+  classDef ociapi fill:#ede9fe,stroke:#6d28d9,color:#2e1065,stroke-width:2px;
   classDef k8s fill:#e2e8f0,stroke:#475569,color:#0f172a,stroke-width:2px;
-  classDef controller fill:#d1fae5,stroke:#059669,color:#064e3b,stroke-width:2px;
-  linkStyle default stroke:#64748b,stroke-width:2px;
+  classDef controller fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:2px;
+  classDef service fill:#fef3c7,stroke:#d97706,color:#451a03,stroke-width:2px;
+  classDef workload fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px;
+  style vcn fill:#faf5ff,stroke:#9333ea,stroke-width:2px,color:#3b0764
+  style oke fill:#eff6ff,stroke:#0284c7,stroke-width:2px,color:#0c4a6e
 ```
+
+See the measured [VCN-native OKE validation](Test/01-VCN-Native-OKE-Validation.md).
+
+### Cilium or overlay OKE: NodePortCluster mode
+
+The controller registers eligible worker VNIC addresses and the Service's allocated UDP NodePort. Cilium performs the final Service lookup and local or cross-node overlay delivery.
+
+```mermaid
+flowchart LR
+  peer[Internet UDP peer]:::external
+
+  subgraph vcn[OCI VCN]
+    nlb[OCI shared NLB<br/>public IP + allocated UDP listener]:::oci
+
+    subgraph oke[Cilium overlay OKE cluster]
+      api[Kubernetes API<br/>GatewayPool, Gateway, UDPRoute,<br/>NodePort Service, EndpointSlice]:::k8s
+      ctl[Shared NLB controller<br/>two replicas, one active leader]:::controller
+      worker[OKE worker VNIC<br/>allocated UDP NodePort]:::worker
+      cilium[Cilium eBPF Service lookup<br/>local delivery or VXLAN/Geneve]:::network
+      pod[UDP workload pod<br/>overlay pod IP]:::workload
+      api -. desired state .-> ctl
+      worker ==>|NodePort traffic| cilium
+      cilium ==>|selected Service endpoint| pod
+    end
+  end
+
+  ociapi[OCI NLB API]:::ociapi
+
+  peer ==>|public IP:listener port| nlb
+  nlb ==>|worker IP:NodePort| worker
+  ctl -. listener, backend set, health .-> ociapi
+  ociapi -. programs .-> nlb
+
+  classDef external fill:#fff7ed,stroke:#ea580c,color:#7c2d12,stroke-width:2px;
+  classDef oci fill:#f3e8ff,stroke:#7e22ce,color:#3b0764,stroke-width:2px;
+  classDef ociapi fill:#ede9fe,stroke:#6d28d9,color:#2e1065,stroke-width:2px;
+  classDef k8s fill:#e2e8f0,stroke:#475569,color:#0f172a,stroke-width:2px;
+  classDef controller fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:2px;
+  classDef worker fill:#cffafe,stroke:#0891b2,color:#164e63,stroke-width:2px;
+  classDef network fill:#ccfbf1,stroke:#0f766e,color:#134e4a,stroke-width:2px;
+  classDef workload fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px;
+  style vcn fill:#faf5ff,stroke:#9333ea,stroke-width:2px,color:#3b0764
+  style oke fill:#ecfeff,stroke:#0891b2,stroke-width:2px,color:#164e63
+```
+
+See the measured [Cilium overlay OKE validation](Test/02-Cilium-Overlay-OKE-Validation.md).
+
+> [!WARNING]
+> The isolated Cilium 1.20.2 canary reproduced Oracle's published OKE issue in which deletion of a duplicate EndpointSlice can remove a still-valid Service backend. Worker `/healthz` remained a separate node-level signal and did not prove that backend existed. Treat [the recorded result](Test/02-Cilium-Overlay-OKE-Validation.md#endpointslice-backend-loss-failure) and Oracle's monitor/restart workaround as a production acceptance gate for the exact OKE and Cilium versions you operate.
 
 The controller uses 45 active listener slots per NLB by default. OCI's service limit is 50; the five unused slots provide operational headroom. The value is configurable up to 50.
 

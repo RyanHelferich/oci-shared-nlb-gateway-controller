@@ -33,39 +33,46 @@ VCN-native clusters may also use `NodePortCluster` when the operator prefers the
 The Service and EndpointSlice identify the ready workload. The controller programs that VCN-native pod address directly into the NLB backend set. UDP packets never traverse the controller.
 
 ```mermaid
-flowchart LR
-  peer[Internet UDP peer]:::external
+flowchart TB
+  peer["1 · Internet UDP peer<br/>connects to public IP:port"]:::external
 
-  subgraph vcn[OCI VCN]
-    nlb[OCI shared NLB<br/>public IP + allocated UDP listener]:::oci
+  subgraph vcn["OCI VCN"]
+    direction TB
+    nlb["2 · Shared OCI NLB<br/>one listener + backend set per route"]:::oci
 
-    subgraph oke[VCN-native OKE cluster]
-      api[Kubernetes API<br/>GatewayPool, Gateway, UDPRoute,<br/>Service, EndpointSlice]:::k8s
-      ctl[Shared NLB controller<br/>two replicas, one active leader]:::controller
-      svc[ClusterIP Service<br/>selected ready endpoint]:::service
-      pod[UDP workload pod<br/>VCN-native routable pod IP]:::workload
-      svc -. selects .-> pod
-      api -. desired state .-> ctl
+    subgraph oke["VCN-native OKE cluster"]
+      direction TB
+      pod["3 · UDP workload pod<br/>routable pod IP:target port"]:::workload
     end
   end
 
-  ociapi[OCI NLB API]:::ociapi
+  subgraph control["CONTROL PLANE · no workload packets"]
+    direction LR
+    desired["Kubernetes state<br/>UDPRoute · Service · EndpointSlice"]:::k8s
+    ctl["Shared NLB controller<br/>validate · allocate · reconcile"]:::controller
+    ociapi["OCI NLB API<br/>listener · backend · health"]:::ociapi
+  end
 
-  peer ==>|public IP:listener port| nlb
-  nlb ==>|UDP directly to pod IP:target port| pod
-  ctl -. listener, backend set, health .-> ociapi
-  ociapi -. programs .-> nlb
+  peer ==> nlb
+  nlb ==> pod
+  desired -.-> ctl
+  ctl -.-> ociapi
+  ociapi -.-> nlb
 
   classDef external fill:#fff7ed,stroke:#ea580c,color:#7c2d12,stroke-width:2px;
   classDef oci fill:#f3e8ff,stroke:#7e22ce,color:#3b0764,stroke-width:2px;
   classDef ociapi fill:#ede9fe,stroke:#6d28d9,color:#2e1065,stroke-width:2px;
   classDef k8s fill:#e2e8f0,stroke:#475569,color:#0f172a,stroke-width:2px;
   classDef controller fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:2px;
-  classDef service fill:#fef3c7,stroke:#d97706,color:#451a03,stroke-width:2px;
   classDef workload fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px;
   style vcn fill:#faf5ff,stroke:#9333ea,stroke-width:2px,color:#3b0764
   style oke fill:#eff6ff,stroke:#0284c7,stroke-width:2px,color:#0c4a6e
+  style control fill:#f8fafc,stroke:#64748b,stroke-width:2px,color:#0f172a
+  linkStyle 0,1 stroke:#2563eb,stroke-width:4px;
+  linkStyle 2,3,4 stroke:#64748b,stroke-width:2px;
 ```
+
+**Solid blue:** customer UDP traffic. **Dashed gray:** controller and cloud API traffic.
 
 See the measured [VCN-native OKE validation](Test/01-VCN-Native-OKE-Validation.md).
 
@@ -74,30 +81,35 @@ See the measured [VCN-native OKE validation](Test/01-VCN-Native-OKE-Validation.m
 The controller registers eligible worker VNIC addresses and the Service's allocated UDP NodePort. Cilium performs the final Service lookup and local or cross-node overlay delivery.
 
 ```mermaid
-flowchart LR
-  peer[Internet UDP peer]:::external
+flowchart TB
+  peer["1 · Internet UDP peer<br/>connects to public IP:port"]:::external
 
-  subgraph vcn[OCI VCN]
-    nlb[OCI shared NLB<br/>public IP + allocated UDP listener]:::oci
+  subgraph vcn["OCI VCN"]
+    direction TB
+    nlb["2 · Shared OCI NLB<br/>one listener + backend set per route"]:::oci
 
-    subgraph oke[Cilium overlay OKE cluster]
-      api[Kubernetes API<br/>GatewayPool, Gateway, UDPRoute,<br/>NodePort Service, EndpointSlice]:::k8s
-      ctl[Shared NLB controller<br/>two replicas, one active leader]:::controller
-      worker[OKE worker VNIC<br/>allocated UDP NodePort]:::worker
-      cilium[Cilium eBPF Service lookup<br/>local delivery or VXLAN/Geneve]:::network
-      pod[UDP workload pod<br/>overlay pod IP]:::workload
-      api -. desired state .-> ctl
-      worker ==>|NodePort traffic| cilium
-      cilium ==>|selected Service endpoint| pod
+    subgraph oke["Cilium overlay OKE cluster"]
+      direction TB
+      worker["3 · OKE worker VNIC<br/>worker IP:allocated NodePort"]:::worker
+      cilium["4 · Cilium service forwarding<br/>local or cross-node overlay"]:::network
+      pod["5 · UDP workload pod<br/>overlay pod IP:target port"]:::workload
     end
   end
 
-  ociapi[OCI NLB API]:::ociapi
+  subgraph control["CONTROL PLANE · no workload packets"]
+    direction LR
+    desired["Kubernetes state<br/>UDPRoute · NodePort Service · Nodes"]:::k8s
+    ctl["Shared NLB controller<br/>validate · allocate · reconcile"]:::controller
+    ociapi["OCI NLB API<br/>listener · backend · health"]:::ociapi
+  end
 
-  peer ==>|public IP:listener port| nlb
-  nlb ==>|worker IP:NodePort| worker
-  ctl -. listener, backend set, health .-> ociapi
-  ociapi -. programs .-> nlb
+  peer ==> nlb
+  nlb ==> worker
+  worker ==> cilium
+  cilium ==> pod
+  desired -.-> ctl
+  ctl -.-> ociapi
+  ociapi -.-> nlb
 
   classDef external fill:#fff7ed,stroke:#ea580c,color:#7c2d12,stroke-width:2px;
   classDef oci fill:#f3e8ff,stroke:#7e22ce,color:#3b0764,stroke-width:2px;
@@ -109,7 +121,12 @@ flowchart LR
   classDef workload fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px;
   style vcn fill:#faf5ff,stroke:#9333ea,stroke-width:2px,color:#3b0764
   style oke fill:#ecfeff,stroke:#0891b2,stroke-width:2px,color:#164e63
+  style control fill:#f8fafc,stroke:#64748b,stroke-width:2px,color:#0f172a
+  linkStyle 0,1,2,3 stroke:#2563eb,stroke-width:4px;
+  linkStyle 4,5,6 stroke:#64748b,stroke-width:2px;
 ```
+
+**Solid blue:** customer UDP traffic. **Dashed gray:** controller and cloud API traffic.
 
 See the measured [Cilium overlay OKE validation](Test/02-Cilium-Overlay-OKE-Validation.md).
 
@@ -122,46 +139,50 @@ The controller uses 45 active listener slots per NLB by default. OCI's service l
 
 ```mermaid
 flowchart TB
-  subgraph kube[Kubernetes control plane]
-    gclass[GatewayClass]:::k8s
-    pool[GatewayPool<br/>capacity and port range]:::k8s
-    route[Gateway + UDPRoute]:::k8s
-    service[Service + EndpointSlices + Nodes]:::k8s
-    internal[NLBPool + TunnelBinding<br/>durable ownership and allocation state]:::state
-    status[Gateway and UDPRoute status]:::state
+  subgraph kubein["1 · KUBERNETES DESIRED STATE"]
+    direction TB
+    desired["GatewayClass + GatewayPool<br/>Gateway + UDPRoute<br/>Service + EndpointSlice + Nodes"]:::k8s
   end
 
-  subgraph deployment[Controller Deployment]
-    leader[Leader-elected controller pod]:::controller
-    standby[Standby controller pod]:::controller
-    adapter[Gateway API adapter<br/>validates supported UDP model]:::controller
-    allocator[Pool allocator<br/>assigns NLB shard and UDP port]:::controller
-    reconciler[OCI reconciler<br/>converges listener, backend set and health]:::controller
+  subgraph deployment["2 · CONTROLLER DEPLOYMENT"]
+    direction TB
+    ha["Leader election<br/>one active replica · one standby"]:::controller
+    validate["Validate<br/>supported UDP model + safe references"]:::controller
+    allocate["Allocate<br/>NLB shard + public listener port"]:::controller
+    durable["Persist ownership<br/>NLBPool + TunnelBinding CRs"]:::state
+    reconcile["Reconcile OCI<br/>listener + backend set + health"]:::controller
   end
 
-  subgraph oracle[OCI control plane]
-    api[OCI Network Load Balancer API]:::oci
-    cloud[Owned shared NLBs<br/>listeners + backend sets]:::oci
+  subgraph oracle["3 · OCI CONTROL PLANE"]
+    direction TB
+    api["OCI Network Load Balancer API"]:::oci
+    cloud["Owned shared NLBs<br/>listeners + backend sets"]:::oci
   end
 
-  gclass --> leader
-  pool --> leader
-  route --> leader
-  service --> leader
-  standby -. lease takeover .-> leader
-  leader --> adapter --> allocator --> internal --> reconciler
-  reconciler -->|create, read, update, delete| api --> cloud
-  reconciler --> status
-  status -. conditions and public IP:port .-> route
+  subgraph kubeout["4 · KUBERNETES OBSERVED STATE"]
+    direction TB
+    status["Gateway + UDPRoute status<br/>conditions + public IP:port"]:::state
+  end
+
+  desired --> ha
+  ha --> validate
+  validate --> allocate
+  allocate --> durable
+  durable --> reconcile
+  reconcile --> api
+  api --> cloud
+  reconcile -.-> status
 
   classDef k8s fill:#e2e8f0,stroke:#475569,color:#0f172a,stroke-width:2px;
   classDef state fill:#fef3c7,stroke:#d97706,color:#451a03,stroke-width:2px;
-  classDef controller fill:#d1fae5,stroke:#059669,color:#064e3b,stroke-width:2px;
-  classDef oci fill:#ede9fe,stroke:#7c3aed,color:#2e1065,stroke-width:2px;
-  style kube fill:#f1f5f9,stroke:#334155,stroke-width:2px,color:#0f172a
-  style deployment fill:#ecfdf5,stroke:#047857,stroke-width:2px,color:#064e3b
-  style oracle fill:#f5f3ff,stroke:#7c3aed,stroke-width:2px,color:#4c1d95
-  linkStyle default stroke:#64748b,stroke-width:2px;
+  classDef controller fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:2px;
+  classDef oci fill:#f3e8ff,stroke:#7e22ce,color:#3b0764,stroke-width:2px;
+  style kubein fill:#f8fafc,stroke:#475569,stroke-width:2px,color:#0f172a
+  style deployment fill:#f0fdf4,stroke:#16a34a,stroke-width:2px,color:#14532d
+  style oracle fill:#faf5ff,stroke:#9333ea,stroke-width:2px,color:#3b0764
+  style kubeout fill:#fffbeb,stroke:#d97706,stroke-width:2px,color:#451a03
+  linkStyle 0,1,2,3,4,5,6 stroke:#475569,stroke-width:3px;
+  linkStyle 7 stroke:#d97706,stroke-width:2px;
 ```
 
 How reconciliation works:

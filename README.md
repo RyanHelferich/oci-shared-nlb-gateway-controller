@@ -33,31 +33,34 @@ VCN-native clusters may also use `NodePortCluster` when the operator prefers the
 The Service and EndpointSlice identify the ready workload. The controller programs that VCN-native pod address directly into the NLB backend set. UDP packets never traverse the controller.
 
 ```mermaid
-flowchart TB
-  peer["1 · Internet UDP peer<br/>connects to public IP:port"]:::external
-
-  subgraph vcn["OCI VCN"]
+flowchart LR
+  subgraph dataplane["UDP DATA PATH"]
     direction TB
-    nlb["2 · Shared OCI NLB<br/>one listener + backend set per route"]:::oci
+    peer["1 · Internet UDP peer<br/>connects to public IP:port"]:::external
 
-    subgraph oke["VCN-native OKE cluster"]
+    subgraph vcn["OCI VCN"]
       direction TB
-      pod["3 · UDP workload pod<br/>routable pod IP:target port"]:::workload
+      nlb["2 · Shared OCI NLB<br/>listener + backend set per route"]:::oci
+
+      subgraph oke["VCN-native OKE cluster"]
+        direction TB
+        pod["3 · UDP workload pod<br/>routable pod IP:target port"]:::workload
+      end
     end
+
+    peer ==> nlb
+    nlb ==> pod
   end
 
   subgraph control["CONTROL PLANE · no workload packets"]
-    direction LR
+    direction TB
     desired["Kubernetes state<br/>UDPRoute · Service · EndpointSlice"]:::k8s
     ctl["Shared NLB controller<br/>validate · allocate · reconcile"]:::controller
-    ociapi["OCI NLB API<br/>listener · backend · health"]:::ociapi
-  end
+    ociapi["OCI NLB API<br/>programs the NLB in the data lane"]:::ociapi
 
-  peer ==> nlb
-  nlb ==> pod
-  desired -.-> ctl
-  ctl -.-> ociapi
-  ociapi -.-> nlb
+    desired -.-> ctl
+    ctl -.-> ociapi
+  end
 
   classDef external fill:#fff7ed,stroke:#ea580c,color:#7c2d12,stroke-width:2px;
   classDef oci fill:#f3e8ff,stroke:#7e22ce,color:#3b0764,stroke-width:2px;
@@ -65,14 +68,15 @@ flowchart TB
   classDef k8s fill:#e2e8f0,stroke:#475569,color:#0f172a,stroke-width:2px;
   classDef controller fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:2px;
   classDef workload fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px;
+  style dataplane fill:#eff6ff,stroke:#2563eb,stroke-width:2px,color:#1e3a8a
   style vcn fill:#faf5ff,stroke:#9333ea,stroke-width:2px,color:#3b0764
   style oke fill:#eff6ff,stroke:#0284c7,stroke-width:2px,color:#0c4a6e
   style control fill:#f8fafc,stroke:#64748b,stroke-width:2px,color:#0f172a
   linkStyle 0,1 stroke:#2563eb,stroke-width:4px;
-  linkStyle 2,3,4 stroke:#64748b,stroke-width:2px;
+  linkStyle 2,3 stroke:#64748b,stroke-width:2px;
 ```
 
-**Solid blue:** customer UDP traffic. **Dashed gray:** controller and cloud API traffic.
+**Left lane:** customer UDP traffic. **Right lane:** the controller reads Kubernetes state and programs the NLB through the OCI API.
 
 See the measured [VCN-native OKE validation](Test/01-VCN-Native-OKE-Validation.md).
 
@@ -81,35 +85,38 @@ See the measured [VCN-native OKE validation](Test/01-VCN-Native-OKE-Validation.m
 The controller registers eligible worker VNIC addresses and the Service's allocated UDP NodePort. Cilium performs the final Service lookup and local or cross-node overlay delivery.
 
 ```mermaid
-flowchart TB
-  peer["1 · Internet UDP peer<br/>connects to public IP:port"]:::external
-
-  subgraph vcn["OCI VCN"]
+flowchart LR
+  subgraph dataplane["UDP DATA PATH"]
     direction TB
-    nlb["2 · Shared OCI NLB<br/>one listener + backend set per route"]:::oci
+    peer["1 · Internet UDP peer<br/>connects to public IP:port"]:::external
 
-    subgraph oke["Cilium overlay OKE cluster"]
+    subgraph vcn["OCI VCN"]
       direction TB
-      worker["3 · OKE worker VNIC<br/>worker IP:allocated NodePort"]:::worker
-      cilium["4 · Cilium service forwarding<br/>local or cross-node overlay"]:::network
-      pod["5 · UDP workload pod<br/>overlay pod IP:target port"]:::workload
+      nlb["2 · Shared OCI NLB<br/>listener + backend set per route"]:::oci
+
+      subgraph oke["Cilium overlay OKE cluster"]
+        direction TB
+        worker["3 · OKE worker VNIC<br/>worker IP:allocated NodePort"]:::worker
+        cilium["4 · Cilium service forwarding<br/>local or cross-node overlay"]:::network
+        pod["5 · UDP workload pod<br/>overlay pod IP:target port"]:::workload
+      end
     end
+
+    peer ==> nlb
+    nlb ==> worker
+    worker ==> cilium
+    cilium ==> pod
   end
 
   subgraph control["CONTROL PLANE · no workload packets"]
-    direction LR
+    direction TB
     desired["Kubernetes state<br/>UDPRoute · NodePort Service · Nodes"]:::k8s
     ctl["Shared NLB controller<br/>validate · allocate · reconcile"]:::controller
-    ociapi["OCI NLB API<br/>listener · backend · health"]:::ociapi
-  end
+    ociapi["OCI NLB API<br/>programs the NLB in the data lane"]:::ociapi
 
-  peer ==> nlb
-  nlb ==> worker
-  worker ==> cilium
-  cilium ==> pod
-  desired -.-> ctl
-  ctl -.-> ociapi
-  ociapi -.-> nlb
+    desired -.-> ctl
+    ctl -.-> ociapi
+  end
 
   classDef external fill:#fff7ed,stroke:#ea580c,color:#7c2d12,stroke-width:2px;
   classDef oci fill:#f3e8ff,stroke:#7e22ce,color:#3b0764,stroke-width:2px;
@@ -119,14 +126,15 @@ flowchart TB
   classDef worker fill:#cffafe,stroke:#0891b2,color:#164e63,stroke-width:2px;
   classDef network fill:#ccfbf1,stroke:#0f766e,color:#134e4a,stroke-width:2px;
   classDef workload fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px;
+  style dataplane fill:#eff6ff,stroke:#2563eb,stroke-width:2px,color:#1e3a8a
   style vcn fill:#faf5ff,stroke:#9333ea,stroke-width:2px,color:#3b0764
   style oke fill:#ecfeff,stroke:#0891b2,stroke-width:2px,color:#164e63
   style control fill:#f8fafc,stroke:#64748b,stroke-width:2px,color:#0f172a
   linkStyle 0,1,2,3 stroke:#2563eb,stroke-width:4px;
-  linkStyle 4,5,6 stroke:#64748b,stroke-width:2px;
+  linkStyle 4,5 stroke:#64748b,stroke-width:2px;
 ```
 
-**Solid blue:** customer UDP traffic. **Dashed gray:** controller and cloud API traffic.
+**Left lane:** customer UDP traffic through workers and Cilium. **Right lane:** the controller reads Kubernetes state and programs the NLB through the OCI API.
 
 See the measured [Cilium overlay OKE validation](Test/02-Cilium-Overlay-OKE-Validation.md).
 

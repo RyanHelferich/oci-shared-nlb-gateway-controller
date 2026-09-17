@@ -2,11 +2,9 @@
 
 ## Correct service model
 
-This project creates OCI **Network Load Balancers** through the Network Load Balancer API. OCI's current documentation describes NLBs as elastically scaling with no bandwidth-shape configuration and says they can exceed 8 Gbps. The 10 Mbps through 8,000 Mbps flexible-shape controls belong to OCI **Load Balancer**, a different reverse-proxy service.
+This project creates OCI **Network Load Balancers** through the Network Load Balancer API. OCI's current documentation describes NLBs as elastically scaling with no bandwidth-shape configuration and says they can exceed 8 Gbps. 
 
 Sources: [OCI Network Load Balancer overview](https://docs.oracle.com/en-us/iaas/Content/NetworkLoadBalancer/overview.htm), [OCI NLB create API/CLI](https://docs.oracle.com/en-us/iaas/tools/oci-cli/latest/oci_cli_docs/cmdref/nlb/network-load-balancer/create.html), and [NLB metrics](https://docs.oracle.com/en-us/iaas/Content/NetworkLoadBalancer/Metrics/metrics.htm).
-
-The public NLB documentation does not publish a guaranteed 45 Gbps ceiling. “Can exceed 8 Gbps” is not an initial 8 Gbps shape assignment. NLB creation has no public shape or bandwidth parameter, so there is no documented customer workflow that replaces an NLB to move it to a larger bandwidth shape. Do not translate “can exceed 8 Gbps” into “45 Gbps is guaranteed,” and do not plan an NLB resize/recreation workflow based on Load Balancer shapes. Obtain a workload-specific capacity statement from the OCI NLB team and validate it in the target region and tenancy.
 
 ## Three independent pool limits
 

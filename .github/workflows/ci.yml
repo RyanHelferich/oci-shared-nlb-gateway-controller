@@ -28,10 +28,13 @@ jobs:
       - name: Helm chart lint and render
         shell: bash
         run: |
+          cd "$RUNNER_TEMP"
           curl -fsSLO https://get.helm.sh/helm-v4.3.0-linux-amd64.tar.gz
           curl -fsSLO https://get.helm.sh/helm-v4.3.0-linux-amd64.tar.gz.sha256sum
           sha256sum --check helm-v4.3.0-linux-amd64.tar.gz.sha256sum
           tar -xzf helm-v4.3.0-linux-amd64.tar.gz
+          helm="$RUNNER_TEMP/linux-amd64/helm"
+          cd "$GITHUB_WORKSPACE"
           values=(
             --set-string image.repository=example.invalid/controller
             --set-string image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -40,8 +43,8 @@ jobs:
             --set-string installationId=ci
             --set gatewayPool.create=true
           )
-          ./linux-amd64/helm lint charts/oci-shared-nlb-controller "${values[@]}"
-          ./linux-amd64/helm template shared-nlb charts/oci-shared-nlb-controller \
+          "$helm" lint charts/oci-shared-nlb-controller "${values[@]}"
+          "$helm" template shared-nlb charts/oci-shared-nlb-controller \
             --namespace test --include-crds "${values[@]}" >/tmp/controller-chart.yaml
       - name: Dependency notices
         run: python scripts/collect-notices.py --check

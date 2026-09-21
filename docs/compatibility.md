@@ -18,7 +18,7 @@
 | NLB backends | Worker hosting the one ready pod | Every admitted worker | Selected pod IP and UDP target port |
 | Health | TCP health NodePort forwarded to the workload | Worker HTTP `:10256/healthz` | TCP target on the same pod |
 | Pod movement | Controller moves the single worker backend | Kubernetes/CNI updates cross-node forwarding | Controller changes pod-IP backend |
-| Source IP | Depends on CNI behavior; validate | Depends on CNI forwarding; not assumed | Disabled in this release |
+| Source IP | Not preserved: NLB source preservation is disabled for every Gateway-API-managed pool in this release | Not preserved | Not preserved |
 
 ## Deliberately bounded Gateway API subset
 
@@ -26,12 +26,14 @@
 - One Service backend reference per route rule.
 - Same-namespace Service references.
 - No backend weights, cross-namespace `ReferenceGrant`, TLS, HTTP, TCPRoute, or arbitrary filters.
-- Automatic allocation uses the `nlb.independent.dev/pool` annotation and controller-owned route `parentRefs`.
+- Automatic allocation uses the `nlb.independent.dev/pool` annotation and controller-owned route `parentRefs`. Backend mode and health port are also chosen by annotation; see the [annotation reference](annotations.md).
 - A manually authored Gateway/listener/route is supported for fixed public ports.
 
 ## Service and workload constraints
 
 - A Service must use a selector and controller-owned EndpointSlices.
+- Single-stack IPv4 only: IPv6 EndpointSlices and addresses are ignored, and worker nodes must expose an OCI `providerID` (`ocid1.instance...`) plus an `InternalIP` address.
+- Every listener uses a fixed 120-second UDP idle timeout; it is not configurable.
 - PodIP mode requires exactly one eligible ready endpoint.
 - NodePortLocal requires exactly one eligible ready endpoint, `externalTrafficPolicy: Local`, one UDP NodePort, and one TCP health NodePort.
 - A multi-port Service uses one selector for every port. It works when the selected pod set owns all declared ports; it cannot choose a different pod set for each port.

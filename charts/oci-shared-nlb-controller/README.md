@@ -4,7 +4,7 @@ Install Gateway API v1.6.2 first with `scripts/install-gateway-crds.py`. Helm in
 
 This chart is an optional pilot interface. The renderer and canonical manifests remain supported. Do not run a Helm-managed and renderer-managed controller for the same namespace and installation ID at the same time.
 
-The chart starts with `gatewayPool.occupancy: 8` so a pilot spreads traffic across more NLBs while throughput is measured. Increase it only after completing the [capacity plan](../../docs/capacity-planning.md); the CRD permits up to 50 and otherwise defaults to 45.
+The chart starts with `gatewayPool.occupancy: 8` so a pilot spreads traffic across more NLBs while throughput is measured. The CRD permits up to 50 and otherwise defaults to 45. Note that `GatewayPool` geometry (`occupancy`, `maxGateways`, `portStart`, `maxWorkers`) is immutable once the pool has been reconciled: a `helm upgrade` that changes these values fails at the API server. To change occupancy after the [capacity plan](../../docs/capacity-planning.md) passes, create a second `GatewayPool` under a new name and migrate routes to it; the new pool receives new NLBs and new public endpoints.
 
 ```sh
 helm upgrade --install shared-nlb charts/oci-shared-nlb-controller \

@@ -16,6 +16,8 @@ go test -count=1 ./...
 go vet ./...
 python tests/package/test_tools.py
 python scripts/collect-notices.py --check
+python scripts/generate-crds.py --check
+python scripts/audit-public.py
 ```
 
 Include tests for changes to allocation, ownership, finalization, endpoint selection, or cloud reconciliation. State which networking mode you tested and whether the result is offline, simulated, or live OCI evidence.

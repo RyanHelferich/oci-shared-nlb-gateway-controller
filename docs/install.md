@@ -36,7 +36,7 @@ Back up existing CRDs and custom resources before upgrades. Do not downgrade Gat
 
 ## 3. Render the controller
 
-Rendering is local and does not require OCI credentials:
+Rendering is local and does not require OCI credentials. From a repository checkout, `--image` is required because `release.json` only exists inside an extracted evaluation package; from a package, `--image` may be omitted to use the packaged digest or given to relocate the image to a private registry.
 
 ```sh
 python scripts/install.py \

@@ -54,6 +54,9 @@ If 45 tunnels can each peak at 1 Gbps at the same time, the stated demand is at 
 
 Until a 45-tunnel concurrent load test and OCI capacity review pass, use a smaller `GatewayPool.spec.occupancy` such as 4 or 8, observe real traffic, and scale the number of NLB shards horizontally. The allocator already creates another NLB when the configured occupancy is full.
 
+> [!IMPORTANT]
+> `GatewayPool` geometry is frozen after the first reconcile. `occupancy`, `maxGateways`, `portStart`, `maxWorkers`, and `gatewayClassName` are enforced immutable by the CRD (`x-kubernetes-validations`) and by the allocator's frozen-spec check, so a later `helm upgrade --set gatewayPool.occupancy=...` or `kubectl edit` is rejected. Occupancy can only be changed by creating a **new** `GatewayPool`, which allocates new Gateways, new NLBs, and therefore new public IP:port endpoints; existing routes must then be migrated per the [route migration](operations.md#route-migration) procedure. Choose occupancy from the acceptance test below before routes go live, and size `maxGateways` generously because it bounds how many NLBs the pool may ever create.
+
 ## Acceptance test
 
 1. Use the same region, public subnet, worker shapes, Cilium mode, `wg-srv` image, MTU, and encryption settings planned for production.
@@ -62,4 +65,4 @@ Until a 45-tunnel concurrent load test and OCI capacity review pass, use a small
 4. Measure authenticated goodput in each direction, loss, reordering, latency, CPU, drops, and recovery during pod and worker failure.
 5. Query `oci_nlb` `ProcessedBytes`, `ProcessedPackets`, `NewConnectionsUDP`, security-list drops, and healthy/unhealthy backend counts.
 6. Repeat with one path or worker unavailable so the remaining capacity meets the written recovery target.
-7. Set pool occupancy from the passed stage and preserve a documented safety margin.
+7. Set pool occupancy from the passed stage in a new `GatewayPool` and preserve a documented safety margin; the value cannot be edited in place afterwards.

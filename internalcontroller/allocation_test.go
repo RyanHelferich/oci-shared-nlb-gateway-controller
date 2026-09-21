@@ -2,8 +2,8 @@ package internalcontroller
 
 import (
 	"encoding/json"
-	"github.com/RyanHelferich/oci-shared-nlb-gateway-controller/api"
 	"fmt"
+	"github.com/RyanHelferich/oci-shared-nlb-gateway-controller/api"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"testing"

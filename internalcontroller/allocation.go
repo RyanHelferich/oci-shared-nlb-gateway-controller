@@ -2,8 +2,8 @@ package internalcontroller
 
 import (
 	"crypto/sha256"
-	"github.com/RyanHelferich/oci-shared-nlb-gateway-controller/api"
 	"fmt"
+	"github.com/RyanHelferich/oci-shared-nlb-gateway-controller/api"
 )
 
 func ValidatePool(s api.PoolSpec) error {

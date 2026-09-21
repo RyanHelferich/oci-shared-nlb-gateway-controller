@@ -2,8 +2,8 @@ package internalcontroller
 
 import (
 	"context"
-	"github.com/RyanHelferich/oci-shared-nlb-gateway-controller/api"
 	"fmt"
+	"github.com/RyanHelferich/oci-shared-nlb-gateway-controller/api"
 	core "k8s.io/api/core/v1"
 	discovery "k8s.io/api/discovery/v1"
 	"k8s.io/apimachinery/pkg/types"

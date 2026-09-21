@@ -2,8 +2,8 @@ package internalcontroller
 
 import (
 	"context"
-	"github.com/RyanHelferich/oci-shared-nlb-gateway-controller/api"
 	"fmt"
+	"github.com/RyanHelferich/oci-shared-nlb-gateway-controller/api"
 	"github.com/oracle/oci-go-sdk/v65/common"
 	n "github.com/oracle/oci-go-sdk/v65/networkloadbalancer"
 )

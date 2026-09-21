@@ -18,14 +18,19 @@ def resource(api, kind, name, namespace=None, **fields):
 
 
 def render(a):
-    release = json.loads(Path(a.release).read_text(encoding="utf-8"))
-    image = a.image or release["image"]
+    image = a.image
+    if not image:
+        # release.json ships inside a packaged archive; a checkout supplies --image instead.
+        release_path = Path(a.release)
+        if not release_path.exists():
+            raise ValueError(f"--image is required when {release_path} is absent (release.json exists only in an extracted package)")
+        image = json.loads(release_path.read_text(encoding="utf-8"))["image"]
     if not re.fullmatch(r"[^\s]+@sha256:[0-9a-f]{64}", image):
         raise ValueError("image must use an immutable sha256 manifest digest")
     if not re.fullmatch(r"[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?", a.namespace):
         raise ValueError("namespace must be a DNS label of at most 63 characters")
-    if not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", a.installation_id):
-        raise ValueError("installation-id must contain 1-64 letters, digits, dots, underscores or hyphens")
+    if not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9._-]{0,61}[A-Za-z0-9])?", a.installation_id):
+        raise ValueError("installation-id must be a valid label value: 1-63 letters, digits, dots, underscores or hyphens, starting and ending alphanumeric")
     for value, prefix in [(a.compartment, "ocid1.compartment."), (a.subnet, "ocid1.subnet.")]:
         if not value.startswith(prefix) or any(c.isspace() for c in value):
             raise ValueError("supply an actual compartment and subnet OCID")

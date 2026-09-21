@@ -13,7 +13,7 @@ TOP_FILES = ["README.md", "LICENSE", "NOTICE", "SUPPORT.md", "CONTRIBUTING.md",
              "THIRD_PARTY_NOTICES.json"]
 SCRIPTS = ["generate-crds.py", "install.py", "install-gateway-crds.py", "package.py", "cleanup.py", "collect-notices.py", "audit-public.py"]
 SECRET_PATTERNS = [rb"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----",
-                   rb"ocid1\.[a-z-]+\.[a-z0-9]*\.[a-z0-9]*\.[a-z0-9]{16,}",
+                   rb"(?i)ocid1\.[a-z-]+\.[a-z0-9-]*\.[a-z0-9-]*\.[a-z0-9]{16,}",  # region segments contain hyphens
                    rb"(?i)(?:authorization:\s*bearer|oci_resource_principal_rpst\s*[:=])\s*[a-z0-9]"]
 
 
@@ -73,6 +73,7 @@ def build(release_file, output):
             info = zipfile.ZipInfo(name, (2026, 1, 1, 0, 0, 0))
             info.compress_type = zipfile.ZIP_DEFLATED
             info.external_attr = 0o100644 << 16
+            info.create_system = 3  # identical archive bytes on Windows and Linux builders
             z.writestr(info, data)
     verify(out)
     print("Archive SHA256: " + digest(out.read_bytes()))

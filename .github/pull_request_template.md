@@ -8,6 +8,8 @@ Describe the trigger, previous behavior, and resulting behavior.
 - [ ] `go vet ./...`
 - [ ] `python tests/package/test_tools.py`
 - [ ] `python scripts/collect-notices.py --check`
+- [ ] `python scripts/generate-crds.py --check`
+- [ ] `python scripts/audit-public.py`
 - [ ] Live OCI testing is identified as performed or not performed
 - [ ] No credentials, account/customer identifiers, or private evidence are included
 

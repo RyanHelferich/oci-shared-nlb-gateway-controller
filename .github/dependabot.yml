@@ -10,10 +10,11 @@ updates:
         update-types:
           - patch
     ignore:
+      # Minor bumps carry security fixes for k8s.io/*, golang.org/x/* and the
+      # OCI SDK, so only majors are gated behind a manual upgrade.
       - dependency-name: "*"
         update-types:
           - version-update:semver-major
-          - version-update:semver-minor
   - package-ecosystem: github-actions
     directory: /
     schedule:
@@ -23,3 +24,8 @@ updates:
       github-actions:
         patterns:
           - "*"
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 1

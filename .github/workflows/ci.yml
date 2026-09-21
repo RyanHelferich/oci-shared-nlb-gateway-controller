@@ -19,10 +19,16 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; echo 'run gofmt -w .'; exit 1; }
       - name: Go tests
-        run: go test -count=1 ./...
+        run: go test -count=1 -race ./...
       - name: Go vet
         run: go vet ./...
+      - name: Vulnerability scan
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+      - name: CRDs match generator
+        run: python scripts/generate-crds.py --check
       - name: Package and installer tests
         run: python tests/package/test_tools.py
       - name: Helm chart lint and render
@@ -30,8 +36,8 @@ jobs:
         run: |
           cd "$RUNNER_TEMP"
           curl -fsSLO https://get.helm.sh/helm-v4.3.0-linux-amd64.tar.gz
-          curl -fsSLO https://get.helm.sh/helm-v4.3.0-linux-amd64.tar.gz.sha256sum
-          sha256sum --check helm-v4.3.0-linux-amd64.tar.gz.sha256sum
+          # Pinned independently of the download origin so a substituted tarball cannot self-certify.
+          echo "86584a54def73570558f66f5111cc53dfed56689637ae32c1201205d494f54fb  helm-v4.3.0-linux-amd64.tar.gz" | sha256sum --check
           tar -xzf helm-v4.3.0-linux-amd64.tar.gz
           helm="$RUNNER_TEMP/linux-amd64/helm"
           cd "$GITHUB_WORKSPACE"

@@ -25,13 +25,13 @@
       },
       "additionalProperties": false
     },
-    "installationId": {"type": "string", "pattern": "^$|^[A-Za-z0-9._-]{1,64}$"},
+    "installationId": {"type": "string", "pattern": "^$|^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,61}[A-Za-z0-9])?$"},
     "gatewayAPI": {
       "type": "object",
       "required": ["enabled", "className", "createClass"],
       "properties": {
         "enabled": {"type": "boolean"},
-        "className": {"type": "string", "minLength": 1},
+        "className": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?$"},
         "createClass": {"type": "boolean"}
       },
       "additionalProperties": false

@@ -1,6 +1,15 @@
-"""Generate versioned structural CRDs from this intentionally small API."""
+"""Generate versioned structural CRDs from this intentionally small API.
+
+Run without arguments to rewrite deploy/*.json and the chart's crds/ copies.
+Run with --check to verify the committed files match the generator (CI).
+"""
 import json
+import sys
 from pathlib import Path
+check='--check' in sys.argv[1:]
+if any(arg not in ('--check',) for arg in sys.argv[1:]):
+    sys.exit('usage: generate-crds.py [--check]')
+stale=[]
 root=Path(__file__).resolve().parents[1]
 out=root/'deploy'
 out.mkdir(exist_ok=True)
@@ -32,5 +41,13 @@ for kind,plural,props,required in [('NLBPool','nlbpools',pool,['compartmentId','
     columns = [('Per-NLB','integer','.spec.occupancy'),('Max-NLBs','integer','.spec.maxShards' if kind=='NLBPool' else '.spec.maxGateways'),('Used-Slots','integer','.status.used'),('Free-Slots','integer','.status.available')] if kind!='TunnelBinding' else [('Pool','string','.spec.pool'),('Public-IP','string','.status.externalIP'),('UDP-Port','integer','.status.externalPort'),('Configured','string',".status.conditions[?(@.type=='Configured')].status")]
     crd['spec']['versions'][0]['additionalPrinterColumns']=[dict(name=n,type=t,jsonPath=p) for n,t,p in columns+[('Age','date','.metadata.creationTimestamp')]]
     content=json.dumps(crd,indent=2)+'\n'
-    (out/(plural+'.json')).write_text(content)
-    (chart_crds/(plural+'.json')).write_text(content)
+    for target in (out/(plural+'.json'), chart_crds/(plural+'.json')):
+        if check:
+            if not target.exists() or target.read_text().replace('\r\n','\n')!=content:
+                stale.append(str(target.relative_to(root)))
+        else:
+            target.write_text(content)
+if check:
+    if stale:
+        sys.exit('CRDs are stale; run scripts/generate-crds.py: '+', '.join(stale))
+    print('CRDs match generator')

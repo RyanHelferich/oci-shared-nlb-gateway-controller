@@ -149,5 +149,22 @@ class ToolsTests(unittest.TestCase):
                 package.verify(path)
 
 
+    def test_package_secret_scan_matches_region_qualified_ocids(self):
+        import re
+        live = ".".join(["ocid1", "networkloadbalancer", "oc1", "us-ashburn-1", "a" * 30]).encode()  # assembled so the audit never sees a literal OCID
+        self.assertTrue(any(re.search(p, live) for p in package.SECRET_PATTERNS), "real region-qualified OCID must be caught")
+        self.assertFalse(any(re.search(p, b"ocid1.compartment.test") for p in package.SECRET_PATTERNS), "documentation placeholders stay allowed")
+
+    def test_install_renders_from_checkout_with_image_and_rejects_bad_installation_id(self):
+        base = dict(release=str(ROOT / "does-not-exist-release.json"), namespace="test", compartment="ocid1.compartment.test", subnet="ocid1.subnet.test", region="test-region", auth="workload", pull_secret=None, gateway_api=True, gateway_class="owned-class")
+        image = "registry.example/controller@sha256:" + "a" * 64
+        install.render(argparse.Namespace(image=image, installation_id="install-1", **base))
+        with self.assertRaisesRegex(ValueError, "--image is required"):
+            install.render(argparse.Namespace(image=None, installation_id="install-1", **base))
+        for bad in ["-leading", "x" * 64, "a/b"]:
+            with self.assertRaisesRegex(ValueError, "installation-id"):
+                install.render(argparse.Namespace(image=image, installation_id=bad, **base))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

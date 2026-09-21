@@ -22,7 +22,7 @@ body:
     id: mode
     attributes:
       label: Backend mode
-      options: [NodePortCluster, PodIP]
+      options: [NodePortLocal, NodePortCluster, PodIP]
     validations:
       required: true
   - type: textarea

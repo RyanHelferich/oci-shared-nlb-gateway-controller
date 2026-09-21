@@ -8,6 +8,10 @@ ROOT = Path(__file__).resolve().parents[1]
 TEXT_SUFFIXES = {".go", ".md", ".json", ".yaml", ".yml", ".py", ".sh", ".mod", ".sum", ".txt"}
 TEXT_NAMES = {"Dockerfile", "LICENSE", "NOTICE", ".gitignore", ".dockerignore"}
 FORBIDDEN_DIRS = [ROOT / "internal", ROOT / "tests" / "oci", ROOT / "dist"]
+# Files that must never exist in the public tree regardless of content; the
+# text scan below only opens known text suffixes, so key material in an
+# extensionless or binary-suffixed file would otherwise pass silently.
+FORBIDDEN_FILES = re.compile(r"(?i)(?:\.(?:pem|key|p12|pfx|crt|cer|der|jks|tfstate|tfvars)$|^\.env(?:\..*)?$|^kubeconfig(?:\.(?!md$)[^.]+)?$|^id_(?:rsa|ed25519|ecdsa)(?:\.pub)?$|^oci_api_key(?:\.[^.]+)?$|^\.netrc$|^\.npmrc$|^\.pypirc$)")
 PATTERNS = {
     "customer project name": re.compile("live" + "kit", re.I),
     "local user or vault path": re.compile("(?:Ryan" + "H|Obsidian" + " Vaults|OCI-" + "FY27)", re.I),
@@ -36,6 +40,9 @@ def main():
     for forbidden in FORBIDDEN_DIRS:
         if forbidden.exists():
             errors.append(f"forbidden public directory exists: {forbidden.relative_to(ROOT)}")
+    for path in ROOT.rglob("*"):
+        if path.is_file() and ".git" not in path.parts and ".cache" not in path.parts and FORBIDDEN_FILES.search(path.name):
+            errors.append(f"{path.relative_to(ROOT)}: credential-bearing file name is never allowed in the public tree")
     for path in text_files():
         relative = path.relative_to(ROOT)
         text = path.read_text(encoding="utf-8", errors="replace")

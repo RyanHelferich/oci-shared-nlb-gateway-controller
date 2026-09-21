@@ -33,6 +33,7 @@ type GatewayPoolStatus struct {
 	Allocations    map[string]GatewayAllocation `json:"allocations,omitempty"`
 	Gateways       map[string]string            `json:"gateways,omitempty"`
 	FrozenSpec     *GatewayPoolSpec             `json:"frozenSpec,omitempty"`
+	Installation   string                       `json:"installation,omitempty"` // Allocator installation that froze the spec; scopes deletion after a class rename.
 	RejectedRoutes map[string]string            `json:"rejectedRoutes,omitempty"`
 	Conditions     []metav1.Condition           `json:"conditions,omitempty"`
 	Used           int                          `json:"used"`

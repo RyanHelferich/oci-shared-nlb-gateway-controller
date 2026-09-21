@@ -264,6 +264,16 @@ func desiredGateway(p *api.GatewayPool, name, installation string) *gw.Gateway {
 	return result
 }
 
+// ownsPool reports whether this installation may finalize the pool. A recorded
+// installation is authoritative; otherwise the class name (current or frozen)
+// is the only evidence available.
+func (r *Reconciler) ownsPool(p *api.GatewayPool) bool {
+	if p.Status.Installation != "" {
+		return p.Status.Installation == r.Installation
+	}
+	return p.Spec.GatewayClassName == r.ClassName || (p.Status.FrozenSpec != nil && p.Status.FrozenSpec.GatewayClassName == r.ClassName)
+}
+
 func ownedGateway(p *api.GatewayPool, g *gw.Gateway, installation string) error {
 	if g.Namespace != p.Namespace || g.Labels[PoolUIDLabel] != string(p.UID) || g.Labels[InstallationLabel] != installation {
 		return fmt.Errorf("refusing foreign Gateway %s", g.Name)
@@ -383,17 +393,32 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	if err := r.Reader.Get(ctx, req.NamespacedName, p); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+	if r.Installation == "" || r.ClassName == "" {
+		return again, fmt.Errorf("GatewayPool allocator configuration is incomplete")
+	}
+	if !p.DeletionTimestamp.IsZero() {
+		// Deletion must remain possible after a class rename or a rejected spec
+		// edit, but only for this installation: cleanup archives the ledger and
+		// removes the shared finalizer, which a foreign installation in the same
+		// namespace must never do. Scope is proven by the recorded installation
+		// or, for pools frozen before that field existed, by the class name.
+		if !r.ownsPool(p) {
+			return again, fmt.Errorf("GatewayPool class is outside configured allocator scope")
+		}
+		return r.cleanup(ctx, p)
+	}
 	if err := Validate(p.Spec); err != nil {
 		return again, err
 	}
-	if r.Installation == "" || r.ClassName == "" || p.Spec.GatewayClassName != r.ClassName {
+	if p.Spec.GatewayClassName != r.ClassName {
 		return again, fmt.Errorf("GatewayPool class is outside configured allocator scope")
 	}
 	if p.Status.FrozenSpec != nil && !reflect.DeepEqual(*p.Status.FrozenSpec, p.Spec) {
 		return again, fmt.Errorf("GatewayPool spec immutable after first reconcile")
 	}
-	if !p.DeletionTimestamp.IsZero() {
-		return r.cleanup(ctx, p)
+	if p.Status.FrozenSpec != nil && p.Status.Installation == "" {
+		p.Status.Installation = r.Installation // Backfill pools frozen before installation scoping existed.
+		return again, r.save(ctx, p, nil)
 	}
 	if !controllerutil.ContainsFinalizer(p, Finalizer) {
 		controllerutil.AddFinalizer(p, Finalizer)
@@ -402,6 +427,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	if p.Status.FrozenSpec == nil {
 		spec := p.Spec
 		p.Status.FrozenSpec = &spec
+		p.Status.Installation = r.Installation
 		return again, r.save(ctx, p, nil)
 	}
 	var routes gw.UDPRouteList

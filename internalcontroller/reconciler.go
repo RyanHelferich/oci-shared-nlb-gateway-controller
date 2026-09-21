@@ -3,8 +3,8 @@ package internalcontroller
 import (
 	"context"
 	"errors"
-	"github.com/RyanHelferich/oci-shared-nlb-gateway-controller/api"
 	"fmt"
+	"github.com/RyanHelferich/oci-shared-nlb-gateway-controller/api"
 	n "github.com/oracle/oci-go-sdk/v65/networkloadbalancer"
 	core "k8s.io/api/core/v1"
 	discovery "k8s.io/api/discovery/v1"
@@ -294,6 +294,14 @@ func (r *Reconciler) reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 				return again, err
 			}
 			continue
+		}
+		if !b.DeletionTimestamp.IsZero() && (a.Shard < 0 || a.Shard >= len(p.Status.Shards) || p.Status.Shards[a.Shard].ID == "") {
+			// The lease was persisted before any cloud call and its shard was
+			// never provisioned, so there is nothing in OCI to remove. Never
+			// create a retained NLB merely to tombstone a departing binding.
+			a.Tombstone = true
+			p.Status.Allocations[string(b.UID)] = a
+			return again, r.savePool(ctx, p)
 		}
 		s, work, e := r.Cloud.EnsureShard(ctx, p, a.Shard)
 		if e != nil {

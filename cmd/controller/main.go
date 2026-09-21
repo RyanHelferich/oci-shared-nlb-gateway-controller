@@ -2,17 +2,19 @@ package main
 
 import (
 	"context"
+	"errors"
+	"flag"
+	"fmt"
 	"github.com/RyanHelferich/oci-shared-nlb-gateway-controller/api"
 	engine "github.com/RyanHelferich/oci-shared-nlb-gateway-controller/internalcontroller"
 	gateway "github.com/RyanHelferich/oci-shared-nlb-gateway-controller/internalgateway"
 	gatewaypool "github.com/RyanHelferich/oci-shared-nlb-gateway-controller/internalgatewaypool"
-	"flag"
-	"fmt"
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/common/auth"
 	"github.com/oracle/oci-go-sdk/v65/core"
 	n "github.com/oracle/oci-go-sdk/v65/networkloadbalancer"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/validation"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"os"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -21,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	"strings"
 )
 
 var version = "0.1.0-dev"
@@ -47,6 +50,17 @@ func run() error {
 	flag.Parse()
 	if compartment == "" || subnet == "" || installation == "" {
 		return fmt.Errorf("compartment, subnet and installation-id are required")
+	}
+	// These values become label values and object-name material on every
+	// generated resource; reject them here instead of failing every Create.
+	if errs := validation.IsValidLabelValue(installation); len(errs) != 0 {
+		return fmt.Errorf("installation-id must be a valid Kubernetes label value (at most 63 alphanumerics, '-', '_' or '.'): %s", strings.Join(errs, "; "))
+	}
+	if errs := validation.IsDNS1123Label(namespace); len(errs) != 0 {
+		return fmt.Errorf("namespace must be a DNS-1123 label: %s", strings.Join(errs, "; "))
+	}
+	if errs := validation.IsDNS1123Subdomain(gatewayClass); len(errs) != 0 {
+		return fmt.Errorf("gateway-class must be a DNS-1123 subdomain: %s", strings.Join(errs, "; "))
 	}
 	ctrl.SetLogger(zap.New(zap.UseDevMode(false)))
 	var provider common.ConfigurationProvider
@@ -76,15 +90,22 @@ func run() error {
 			return e
 		}
 		netClient.SetRegion(region)
+		var failures []error
 		sub, e := netClient.GetSubnet(ctx, core.GetSubnetRequest{SubnetId: &subnet})
 		fmt.Printf("GetSubnet: %v\n", e)
 		if e == nil {
 			_, e = netClient.GetVcn(ctx, core.GetVcnRequest{VcnId: sub.VcnId})
 			fmt.Printf("GetVcn: %v\n", e)
 		}
+		if e != nil {
+			failures = append(failures, e)
+		}
 		_, e = cloud.GetNetworkLoadBalancer(ctx, n.GetNetworkLoadBalancerRequest{NetworkLoadBalancerId: &checkNLB})
 		fmt.Printf("GetNetworkLoadBalancer: %v\n", e)
-		return e
+		if e != nil {
+			failures = append(failures, e)
+		}
+		return errors.Join(failures...) // exit non-zero if any check failed, not only the last
 	}
 	scheme := runtime.NewScheme()
 	_ = clientgoscheme.AddToScheme(scheme)
@@ -100,7 +121,7 @@ func run() error {
 			return err
 		}
 	}
-	manager, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{Scheme: scheme, Cache: cache.Options{DefaultNamespaces: map[string]cache.Config{namespace: {}}}, LeaderElection: true, LeaderElectionNamespace: namespace, LeaderElectionID: "shared-nlb-controller", LeaderElectionReleaseOnCancel: false, HealthProbeBindAddress: ":8081", Metrics: metricsserver.Options{BindAddress: ":8080"}})
+	manager, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{Scheme: scheme, Cache: cache.Options{DefaultNamespaces: map[string]cache.Config{namespace: {}}}, LeaderElection: true, LeaderElectionNamespace: namespace, LeaderElectionID: "shared-nlb-controller", LeaderElectionReleaseOnCancel: true, HealthProbeBindAddress: ":8081", Metrics: metricsserver.Options{BindAddress: ":8080"}})
 	if err != nil {
 		return err
 	}

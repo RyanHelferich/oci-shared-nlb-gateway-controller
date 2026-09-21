@@ -494,3 +494,18 @@ func TestRetirementRefusesForeignArchiveAndActiveLease(t *testing.T) {
 		})
 	}
 }
+
+// A deleted Gateway or the synthetic namespace sweep must not self-requeue on
+// a timer forever; watched events already enqueue the sweep.
+func TestMissingGatewayAndSweepRequestDoNotRequeue(t *testing.T) {
+	f := setup(t, nil)
+	for _, name := range []string{"gateway-cleanup-sweep", "never-existed"} {
+		result, err := f.r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "managed", Name: name}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.RequeueAfter != 0 {
+			t.Fatalf("%s: expected no requeue, got %#v", name, result)
+		}
+	}
+}

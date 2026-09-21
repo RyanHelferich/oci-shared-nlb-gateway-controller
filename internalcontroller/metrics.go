@@ -2,10 +2,11 @@ package internalcontroller
 
 import (
 	"context"
-	"github.com/RyanHelferich/oci-shared-nlb-gateway-controller/api"
 	"fmt"
+	"github.com/RyanHelferich/oci-shared-nlb-gateway-controller/api"
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/prometheus/client_golang/prometheus"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"reflect"
@@ -13,7 +14,21 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"time"
+	"unicode/utf8"
 )
+
+// truncateUTF8 cuts s to at most limit bytes without splitting a rune, so a
+// long OCI error never leaves invalid UTF-8 in a status condition.
+func truncateUTF8(s string, limit int) string {
+	if len(s) <= limit {
+		return s
+	}
+	cut := limit
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut]
+}
 
 var poolSlots = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "shared_nlb_pool_slots", Help: "Slots by state; retired slots cannot be reused."}, []string{"namespace", "pool", "state"})
 var poolShards = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "shared_nlb_pool_shards", Help: "Persisted native NLB shards."}, []string{"namespace", "pool"})
@@ -38,6 +53,13 @@ func (r *Reconciler) report(ctx context.Context, req ctrl.Request, result ctrl.R
 	}
 	p := &api.NLBPool{}
 	if err := r.Reader.Get(ctx, req.NamespacedName, p); err != nil {
+		if apierrors.IsNotFound(err) {
+			// Drop the deleted pool's series instead of exporting stale gauges forever.
+			labels := prometheus.Labels{"namespace": req.Namespace, "pool": req.Name}
+			poolSlots.DeletePartialMatch(labels)
+			poolShards.DeletePartialMatch(labels)
+			poolPending.DeletePartialMatch(labels)
+		}
 		return
 	}
 	active, retired := 0, 0
@@ -66,7 +88,7 @@ func (r *Reconciler) report(ctx context.Context, req ctrl.Request, result ctrl.R
 			condition.Message = fmt.Sprintf("OCI HTTP %d %s: %s", e.GetHTTPStatusCode(), e.GetCode(), e.GetMessage())
 		}
 		if len(condition.Message) > 1024 {
-			condition.Message = condition.Message[:1024]
+			condition.Message = truncateUTF8(condition.Message, 1024)
 		}
 	}
 	if problem == nil && result.RequeueAfter >= 15*time.Second {

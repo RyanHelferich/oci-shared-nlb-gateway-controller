@@ -111,7 +111,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 	}
 	g := &gateway.Gateway{}
 	if err := r.Reader.Get(ctx, request.NamespacedName, g); err != nil {
-		return again, client.IgnoreNotFound(err)
+		if errors.IsNotFound(err) {
+			// The namespace sweep above already ran. A deleted Gateway or the
+			// synthetic sweep request must not self-requeue forever; every
+			// watched event enqueues the sweep again.
+			return ctrl.Result{}, nil
+		}
+		return again, err
 	}
 	if string(g.Spec.GatewayClassName) != r.GatewayClassName && !controllerutil.ContainsFinalizer(g, GatewayFinalizer) {
 		return ctrl.Result{}, nil
